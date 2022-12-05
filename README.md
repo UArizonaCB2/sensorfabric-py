@@ -23,6 +23,7 @@ The Athena module abstracts query execution and caching, by returning results fr
 as Pandas dataframes. </br>
 **To run this locally you must have aws credentials configured using `aws configure`**
 
+Example
 ```
 from sensorfabric.athena import athena
 import pandas as pd
@@ -44,4 +45,26 @@ executionId = db.startQueryExec('SELECT "participantId" FROM "fitbit_hr" LIMIT 5
 frame = db.queryResults(executionId)
 # Returns the query result as a dataframe
 print(frame.head()) 
+```
+
+**Enabling offline caching**
+In order to enable offline caching for queries pass `offlineCache=True` to `Athena()`.
+When caching is enabled a `.cache` folder is creating in the calling directory, and query
+results are stored in it. Files are named using the md5 hash of the query string. 
+Pass `cached=True` to `execQuery()` in order to use cached results. The following important
+points need to be noted when using caching -
+* Only exact query strings will cache to the same files.
+* Both `offlineCache` and `cached` must be set true for this to work.
+* There is currently no time limit on the cached results (This might change). 
+* If you want to reset the cache you can delete the `.cache directory`.
+
+Example
+```
+db = athena(database='MyBigDatabase', offlineCache=True)
+
+# The first query will hit Athena but cache the local results in the .cache directory.
+frame = db.execQuery('SELECT DISTINCT(pid) FROM temperature', cached=True)
+print(frame.head())
+# The second exact query will return results from the local cache.
+frame = db.execQuery('SELECT DISTINCT(pid) FROM temperature', cached=True)
 ```

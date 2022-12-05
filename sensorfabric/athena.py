@@ -19,6 +19,8 @@ TODO:
 
 import boto3
 import pandas
+import hashlib
+import os
 
 class athena:
     """
@@ -34,17 +36,26 @@ class athena:
     1. database : Name of the database to connect to.
     2. catalog : The data catalog to use. Default value is `AwsDataCatalog`.
     3. workgroup : The workgroup inside which all the queries are executed. Default set to `primary`
+    4. offlineCache : (true | false) If set to true the results from queries are cached locally and used for future requests
 
     Note - The workgroup must have query result s3 path set.
     """
     def __init__(self, database:str,
                  catalog='AwsDataCatalog',
-                 workgroup='primary'):
+                 workgroup='primary',
+                 offlineCache=False):
         self.database = database
         self.catalog = catalog
         self.workgroup = workgroup
+        self.offlineCache = offlineCache
 
         self.client = boto3.client('athena')
+
+        self.cacheDir = '.cache'
+
+        if self.offlineCache:
+            if not os.path.isdir(self.cacheDir):
+                os.mkdir(self.cacheDir)
 
     """
     Description
@@ -108,8 +119,6 @@ class athena:
             columnNames += [c[k]]
             map[c[k]] = []
 
-        print(columnNames)
-
         for i in range(2, len(data)):
             row = data[i]['Data']
             for idx, r in enumerate(row):
@@ -135,8 +144,9 @@ class athena:
     ----------
     1. queryString : SQL query to execute.
     2. queryParam : A list of query parameters.
-    3. cached : True | False (default). If set to True, previous query results
-    from within the last 60 mins are returned.
+    3. cached : True | False (default). If set to True, previous query results are returned.
+                offlineCache=True must be passed during object creation. Else this option is
+                ignored.
     4. defaultTimeout : Query execution timeout. Default is 60 seconds.
 
     Returns
@@ -149,6 +159,16 @@ class athena:
         executionId = self.startQueryExec(queryString,
                                           queryParams,
                                           cached)
+
+        # Check if we have requested cached results and we are setup for serving cache results (offlineCache=True)
+        if self.offlineCache and cached:
+            filename = self._cacheFileName(queryString)
+            path = self.cacheDir+'/'+filename+'.cache'
+            if os.path.isfile(path):
+                # Load the data from the cache and return the results.
+                frame = pandas.read_csv(open(path, 'r'))
+                return frame
+
         state = None
         while True:
             response = self.client.get_query_execution(QueryExecutionId=executionId)
@@ -166,4 +186,19 @@ class athena:
         # Query execution has finished we can now get the query results.
         frame = self.queryResults(executionId)
 
+        # Save this query to the local .cache directory if the offline caching is set to true.
+        if self.offlineCache:
+            filename = self._cacheFileName(queryString)
+            frame.to_csv(self.cacheDir+'/'+filename+'.cache', index=False)
+
         return frame
+
+    """
+    Method which calculates the hashed filename for cached query results.
+
+    """
+    def _cacheFileName(self, queryString:str) -> str:
+        hash = hashlib.md5(queryString.encode())
+        filename = hash.hexdigest()
+
+        return filename
