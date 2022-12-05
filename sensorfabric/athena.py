@@ -92,11 +92,29 @@ class athena:
 
     Parameters
     ----------
+    1. executionId : The query executionId returned by startQueryExec()
+    2. nextToken : Used for query pagination.
+    3. columnNames : Used to keep track of fields returned by a query during pagination.
+
+    Returns
+    -------
+    1. frame : The data inside a pandas frame. Result can truncated in case of pagination.
+    2. nextToken : Set to a stirng if the current output was truncated. Holds the pagination id.
     """
-    def queryResults(self, executionId):
-        result = self.client.get_query_results(
-            QueryExecutionId = executionId
-        )
+    def queryResults(self, executionId, nextToken=None, columnNames=[]):
+        result = None
+        if nextToken:
+            result = self.client.get_query_results(
+                QueryExecutionId = executionId,
+                NextToken = nextToken
+            )
+        else:
+            result = self.client.get_query_results(
+                QueryExecutionId = executionId,
+            )
+
+        if result is None:
+            raise Exception('Failed to fetch query results')
 
         data = result['ResultSet']['Rows']
         if len(data) <= 0:
@@ -111,15 +129,20 @@ class athena:
         """
 
         map = {}
-        columnNames = []  # So we can maintain the order.
         # The first element in the data list will be the column names.
-        cols = data[0]['Data']
-        for c in cols:
-            k = list(c.keys())[0]
-            columnNames += [c[k]]
-            map[c[k]] = []
+        # If this is being called from pagination, then we used the columns pased.
+        dataStart = 0
+        if len(columnNames) <= 0:
+            cols = data[0]['Data']
+            dataStart = dataStart + 1  # The first row will be the columns in this case.
+            for c in cols:
+                k = list(c.keys())[0]
+                columnNames += [c[k]]
 
-        for i in range(2, len(data)):
+        for c in columnNames:
+            map[c] = []
+
+        for i in range(dataStart, len(data)):
             row = data[i]['Data']
             for idx, r in enumerate(row):
                 temp = map[columnNames[idx]]
@@ -127,12 +150,19 @@ class athena:
                     k = list(r.keys())[0]
                     temp += [r[k]]
                 else:   # There is no data for this column
-                    temp += [None]  # pandas will conver this later to NaN
+                    temp += [None]  # pandas will convert this later to NaN
 
                 map[columnNames[idx]] = temp
 
-        # Convert the result into a pandas
-        return pandas.DataFrame(map)
+        # Convert the result into a panda
+        frame = pandas.DataFrame(map)
+        # Check to see if this response was truncated.
+        if 'NextToken' in result:
+            nextToken = result['NextToken']
+        else:
+            nextToken = None
+
+        return (frame, nextToken)
 
     """
     Description
@@ -183,8 +213,18 @@ class athena:
             # Return query cancelled execution.
             pass
 
+        # TODO: Give users the option to stop pagination, or alert them that this is a big
+        #       query and can lead to pagination / memory hog.
         # Query execution has finished we can now get the query results.
-        frame = self.queryResults(executionId)
+        frame, nextToken = self.queryResults(executionId,
+                                             nextToken=None,
+                                             columnNames=[])
+        # If this request was paginated, we go ahead and get all the remaining pages.
+        while nextToken:
+            framepage, nextToken = self.queryResults(executionId,
+                                                     nextToken=nextToken,
+                                                     columnNames=frame.columns)
+            frame = pandas.concat([frame, framepage])
 
         # Save this query to the local .cache directory if the offline caching is set to true.
         if self.offlineCache:
