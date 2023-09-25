@@ -11,10 +11,11 @@ A set of bindings to connect to AWS Athena to help run queries on sensor data.
 For security, this library currently only supports read operations on the database.
 
 TODO:
-1. Handle pagination for larger queries.
+1. Handle pagination for larger queries [done].
 2. Implement the default timeout condition to prevent this code from going into an infinite loop.
 3. Error handling for failed and cancelled queries.
-4. Support query caching internally inside the library, to make use of the same execution ID.
+4. Support query caching internally inside the library, to make use of the same execution ID [done].
+5. Allow users to define their own cachine path.
 """
 
 import boto3
@@ -37,19 +38,34 @@ class athena:
     2. catalog : The data catalog to use. Default value is `AwsDataCatalog`.
     3. workgroup : The workgroup inside which all the queries are executed. Default set to `primary`
     4. offlineCache : (true | false) If set to true the results from queries are cached locally and used for future requests
+    5. s3_location : Explicitly specificy the s3 location where query results will be stored. If None, then the default
+                        location from the workgroup will be used.
+    6. profile_name : Explicitly set the profile to use from aws credentials file. If None, then the value from AWS_PROFILE environment
+                        variable will be used.
 
     Note - The workgroup must have query result s3 path set.
     """
     def __init__(self, database:str,
                  catalog='AwsDataCatalog',
                  workgroup='primary',
-                 offlineCache=False):
+                 offlineCache=False,
+                 s3_location=None,
+                 profile_name=None):
+
         self.database = database
         self.catalog = catalog
         self.workgroup = workgroup
         self.offlineCache = offlineCache
+        self.s3_location = s3_location
 
-        self.client = boto3.client('athena')
+        if profile_name is None:
+            if not ('AWS_PROFILE' in os.environ):
+                raise Exception('Could not find aws profile to use. Either set it in AWS_PROFILE or pass it explicitly using the parameter profile_name')
+            self.client = boto3.client('athena')
+        else:
+            # We need to use the profile name that was provided in this call.
+            session = boto3.Session(profile_name=profile_name)
+            self.client = session.client('athena')
 
         self.cacheDir = '.cache'
 
@@ -74,6 +90,12 @@ class athena:
     1. QueryExecutionId : A string with query execution id.
     """
     def startQueryExec(self, queryString:str, queryParams=[], cached=False) -> str:
+
+        # Selectively add the resultconfiguration.
+        ResultConfiguration = {}
+        if not (self.s3_location is None):
+            ResultConfiguration['OutputLocation'] = self.s3_location
+
         result = self.client.start_query_execution(
             QueryString = queryString,
             QueryExecutionContext = {
@@ -81,6 +103,7 @@ class athena:
                 'Catalog' : self.catalog
             },
             WorkGroup = self.workgroup,
+            ResultConfiguration = ResultConfiguration
         )
 
         return result['QueryExecutionId']

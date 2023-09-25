@@ -1,0 +1,185 @@
+#!/usr/bin/env python3
+
+"""
+Author : Shravan Aras.
+Email : shravanaras@arizona.edu
+Date : 09/18/2023
+Organization : University of Arizona
+
+This package is part of the SensorFabric project.
+
+Description :
+A needle is what you loose in a haystack.
+But a needle is always what builds the fabric.
+"""
+
+from sensorfabric.mdh import MDH
+from sensorfabric import utils
+from sensorfabric.athena import athena
+import pandas
+import os
+
+supported_methods = ['aws', 'mdh']
+
+class Needle:
+    def __init__(self, method=None,
+                 aws_configuration=None,
+                 mdh_configiration=None,
+                 offlineCache=False,
+                 profileName='sensorfabric'):
+        """
+        Creates a new needle (a connector into the dataset) based on the configuration provided.
+        If no arguments are passed then environment variables are used.
+
+        Parameters
+        ----------
+        1. method : Can be 'aws' to connect directly AWS Athena or 'mdh'
+                    to connect to MyDataHelps.
+        2. aws_configuration: AWS Athena connection details -
+           aws_configuration = {
+                                    database : '',
+                                    catalog : '',
+                                    workgroup : '',
+                                    s3_location: ''
+                               }
+        3. mdh_configuration = {
+                                account_secret : '',
+                                account_name : '',
+                                project_code : ''
+                                }
+        4. offlineCache : True to cache the results locally. False otherwise.
+        """
+        self.method = method
+        if not(self.method in supported_methods):
+            raise Exception('{} method is currently not supported'.format(self.method))
+
+        self.aws_configuration = aws_configuration
+        self.mdh_configuration = mdh_configiration
+        self.offlineCache = offlineCache
+        self.db = None
+        self.mdh = None
+
+        self.profileName = profileName
+        self.aws_configuration = aws_configuration
+        self.mdh_configuration = mdh_configiration
+        self.mdh_org_id = None
+
+        # Set the configuration from environment variables if they have
+        # not been passed.
+        if self.method == 'aws' and self.aws_configuration is None:
+            self.aws_configuration = {
+                'database' : os.environ['SF_DATABASE'],
+                'catalog' : os.environ['SF_CATALOG'] if 'SF_CATALOG' in os.environ else 'AwsDataCatalog',
+                'workgroup' : os.environ['SF_WORKGROUP'] if 'SF_WORKGROUP' in os.environ else 'primary',
+                's3_location' : os.environ['SF_S3LOC'] if 'SF_S3LOC' in os.environ else None
+            }
+
+        if self.method == 'mdh' and self.mdh_configuration is None:
+            self.mdh_configuration = {
+                'account_secret' : os.environ['MDH_SECRET'],
+                'account_name' : os.environ['MDH_ACC_NAME'],
+                'project_name' : os.environ['MDH_PROJ_NAME']
+            }
+
+        # Create the base athena connector depending on the configuration
+        # given.
+        if self.method == 'aws':
+            self._configureAWS()
+        elif self.method == 'mdh':
+            self._configureMDH()
+        else:
+            raise Exception('Unsupported method. Must be either "aws" or "mdh"')
+
+        # If we have gotten here it means that the AWS credentials have been configured.
+        # We do a quick read to make sure the basics have been configured.
+        # If they are not we will need to error out here and raise an exception.
+
+        credentials = utils.readAWSCredentials(self.profileName)
+
+        if 'aws_access_key_id' in credentials and 'aws_secret_access_key' in credentials:
+            pass
+        else:
+            raise Exception('Unable to confirm AWS credentials by reading them')
+
+        # We are all set now. Let us go ahead and create the database object.
+        if self.method == 'mdh':
+            database = 'mdh_export_database_rk_{}_{}_prod'.format(self.mdh_org_id.lower(), self.mdh_configuration['project_name'])
+            workgroup = 'mdh_export_database_external_prod'
+            s3_location = 's3://pep-mdh-export-database-prod/execution/rk_{}_{}'.format(self.mdh_org_id.lower(), self.mdh_configuration['project_name'].lower())
+
+            self.db = athena(database=database,
+                             workgroup=workgroup,
+                             offlineCache=offlineCache,
+                             s3_location=s3_location,
+                             profile_name=profileName)
+
+    def _configureAWS(self):
+        """
+        Internal method which just appends the environment variables into the
+        local credentials file.
+        """
+        credentials = {
+            'aws_access_key_id' : os.environ['AWS_ACCESS_KEY_ID'],
+            'aws_secret_access_key' : os.environ['AWS_SECRET_ACCESS_KEY'],
+            'aws_session_token' : None,
+            'region' : os.environ['AWS_REGION'],
+            'expires' : None
+        }
+
+        utils.appendAWSCredentials(self.profileName, credentials)
+
+    def _configureMDH(self):
+        """
+        Internal method that configures sensorfabric to use MDH as the
+        backend.
+        """
+        self.mdh = MDH(self.mdh_configuration['account_secret'],
+                  self.mdh_configuration['account_name'],
+                  project_id=None)
+        # Generate the servicetoken using the service secret.
+        token = self.mdh.genServiceToken()
+
+        # Extract the organization id from the account name.
+        acc_name = self.mdh_configuration['account_name']
+        buff = acc_name.split('.')
+        if len(buff) < 3:
+            raise Exception('Invalid MDH account name format')
+        self.mdh_org_id = buff[1]
+
+        # Check if the AWS credentials are already set and valid,
+        # if not add / update them.
+        self._testAndRequestNew()
+
+    def _testAndRequestNew(self):
+        """
+        Internal method which tests to see if the AWS credentials are valid.
+        If they are not then new ones are created.
+
+        TODO: Hold the expiration data locally inside the object instead of doing
+        a file read.
+        """
+        if not utils.isAWSCredValid(self.profileName):
+            dataExplorer = self.mdh.getExplorerCreds('RK.'+self.mdh_org_id+'.'+self.mdh_configuration['project_name'])
+            utils.appendAWSCredentials(self.profileName, dataExplorer)
+
+    def execQuery(self, queryString:str, queryParams=[],
+                  defaultTimeout=60) -> pandas.DataFrame:
+        """
+        Description
+        -----------
+        This method is blocking. It executes the query and returns the result as a pandas
+        data frame.
+
+        Parameters
+        ----------
+        1. queryString : SQL query to execute.
+        2. queryParam : A list of query parameters.
+        4. defaultTimeout(unimplemented) : Query execution timeout. Default is 60 seconds.
+
+        Returns
+        -------
+        Returns a pandas dataframe. If the SQL query returns an empty dataset,
+        this will return an empty pandas frame.
+        """
+        self._testAndRequestNew()
+        return self.db.execQuery(queryString, queryParams, defaultTimeout)
