@@ -113,17 +113,20 @@ class Needle:
                              s3_location=s3_location,
                              profile_name=profileName)
 
+        elif self.method == 'aws':
+           self.db = athena(database=self.aws_configuration['database'],
+                            offlineCache=offlineCache,
+                            profile_name=profileName)
+
     def _configureAWS(self):
         """
         Internal method which just appends the environment variables into the
         local credentials file.
         """
         credentials = {
-            'aws_access_key_id' : os.environ['AWS_ACCESS_KEY_ID'],
-            'aws_secret_access_key' : os.environ['AWS_SECRET_ACCESS_KEY'],
-            'aws_session_token' : None,
+            'AccessKeyId' : os.environ['AWS_ACCESS_KEY_ID'],
+            'SecretAccessKey' : os.environ['AWS_SECRET_ACCESS_KEY'],
             'region' : os.environ['AWS_REGION'],
-            'expires' : None
         }
 
         utils.appendAWSCredentials(self.profileName, credentials)
@@ -154,11 +157,11 @@ class Needle:
         """
         Internal method which tests to see if the AWS credentials are valid.
         If they are not then new ones are created.
-
+        NOTE: Renewal is only supported for temp credentials from MDH.
         TODO: Hold the expiration data locally inside the object instead of doing
         a file read.
         """
-        if not utils.isAWSCredValid(self.profileName):
+        if not utils.isAWSCredValid(self.profileName) and self.method == 'mdh':
             dataExplorer = self.mdh.getExplorerCreds('RK.'+self.mdh_org_id+'.'+self.mdh_configuration['project_name'])
             utils.appendAWSCredentials(self.profileName, dataExplorer)
 

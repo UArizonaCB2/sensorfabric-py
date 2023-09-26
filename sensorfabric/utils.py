@@ -51,9 +51,12 @@ def appendAWSCredentials(profilename : str,
         cp.add_section(profilename)
         cp.set(profilename, 'aws_access_key_id', aws_credentials['AccessKeyId'])
         cp.set(profilename, 'aws_secret_access_key', aws_credentials['SecretAccessKey'])
-        cp.set(profilename, 'aws_session_token', aws_credentials['SessionToken'])
         cp.set(profilename, 'region', 'us-east-1')
-        cp.set(profilename, 'expires', aws_credentials['Expiration'])
+        # The next 2 are optional.
+        if 'aws_session_token' in aws_credentials:
+            cp.set(profilename, 'aws_session_token', aws_credentials['SessionToken'])
+        if 'Expiration' in aws_credentials:
+            cp.set(profilename, 'expires', aws_credentials['Expiration'])
 
     # Write the new profile contents back to the credentials file.
     with path.open('w') as f:
@@ -70,6 +73,9 @@ def isAWSCredValid(profilename : str,
     """
     profile = readAWSCredentials(profilename, filepath=filepath)
     if profile is None:
+        return False
+
+    if not ('expires' in profile):
         return False
 
     # The profile is already there. Lets go ahead and read the expire
