@@ -7,7 +7,7 @@ with open('README.md', 'r') as f:
 
 setup(
     name='sensorfabric',
-    version='0.1.4',
+    version='2.0.0',
     description='Python library for UA Sensor Fabric',
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -20,6 +20,11 @@ setup(
     python_requires='>=3',
     install_requires=[
           'boto3',
-          'pandas'
+          'pandas',
+          'configparser',
+          'pathlib',
+          'numpy',
+          'requests',
+          'jwt'
       ],
 )
