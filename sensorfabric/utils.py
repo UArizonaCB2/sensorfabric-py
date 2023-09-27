@@ -53,7 +53,7 @@ def appendAWSCredentials(profilename : str,
         cp.set(profilename, 'aws_secret_access_key', aws_credentials['SecretAccessKey'])
         cp.set(profilename, 'region', 'us-east-1')
         # The next 2 are optional.
-        if 'aws_session_token' in aws_credentials:
+        if 'SessionToken' in aws_credentials:
             cp.set(profilename, 'aws_session_token', aws_credentials['SessionToken'])
         if 'Expiration' in aws_credentials:
             cp.set(profilename, 'expires', aws_credentials['Expiration'])
