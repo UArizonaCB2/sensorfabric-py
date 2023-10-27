@@ -106,6 +106,7 @@ class Needle:
             database = 'mdh_export_database_rk_{}_{}_prod'.format(self.mdh_org_id.lower(), self.mdh_configuration['project_name'])
             workgroup = 'mdh_export_database_external_prod'
             s3_location = 's3://pep-mdh-export-database-prod/execution/rk_{}_{}'.format(self.mdh_org_id.lower(), self.mdh_configuration['project_name'].lower())
+            print(database)
 
             self.db = athena(database=database,
                              workgroup=workgroup,

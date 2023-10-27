@@ -141,7 +141,10 @@ class MDH:
             'Content-Type' : 'application/json; charset=utf-8'
         }
 
+        print(headers)
+
         response = requests.post(url=ep.MDH_EXPLORER_URL, headers=headers)
+        print(response.content)
         response.raise_for_status()
 
         return response.json()
