@@ -149,9 +149,154 @@ class MDH:
 
         return response.json()
 
-    def getExports(self):
+    def getExports(self, pageNumber, pageSize):
         """
         Method which gets all the export meta-data for a project.
         """
 
-        return self.makeGetRequests(ep.MDH_BASE+ep.MDH_EXPORT_DETAILS.format(projectID=self.project_id))
+        return self.makeGetRequests(ep.MDH_BASE + 
+                                    ep.MDH_EXPORT_DETAILS.format(projectID=self.project_id) +
+                                    '?pageNumber={pageNumber}&pageSize={pageSize}'.format(pageNumber=pageNumber,
+                                                                                          pageSize=pageSize))
+    
+    def getExportData(self, date_range=None , base_path=None):
+        """
+        Parameters
+        ----------
+        1. date_range: [start_date, end_date) --> tuple
+        start_date is inclusive and end_date is not inclusive
+        This parameter needs a 2 entries. A start date and an end_date.
+        Enter them as a string in the format "YYYY-MM-DD"
+        The function will download all available exports between these dates.
+        
+         
+        2. base_path: Pass a path where you want to save the exports. If nothing is passed,
+        the function saves the exports to the current working directory of the file.
+        So as a suggestion, one should always pass a path to save the exports zip file.
+        
+        Returns 
+        -------
+        No return for this function. It just saves all the files
+        
+        REFERENCES: https://developer.mydatahelps.org/api/projects.html#toc-get-exports
+        """
+        
+        # if the token is not alive, get the service token 
+        if not self.isTokenAlive():
+            self.genServiceToken()
+        
+        # Defining headers to ocnfigure the API requests
+        headers = {
+            'Authorization' : 'Bearer '+self.token,
+            'Accept' : 'application/json',
+            'Content-Type' : 'application/json; charset=utf-8'
+        }
+        
+        # Let's start by gathering a list of all the exports
+        pageNumber = 0
+        exports_info = self.getExports(pageNumber=pageNumber, pageSize=100)
+        exports = exports_info['exports']
+        total_exports = exports_info['totalExports']
+        
+        while len(exports) < total_exports:
+            pageNumber += 1
+            exports += self.getExports(pageNumber=pageNumber, pageSize=100)['exports']
+        
+        # Now we check if we need to get the latest export or exports between range of dates
+        if date_range is None:
+            
+            # Get export_id of the latest export
+            latest_export_id = exports[0]['id']
+            
+            # Frame the url using endopoints
+            export_data_url = ep.MDH_BASE + ep.MDH_EXPORT_DATA.format(projectID=self.project_id, exportID=latest_export_id)
+            
+            # Generate name of the file
+            start_date = datetime.fromisoformat(exports[0]['dataStartDate']).date()
+            day = int(start_date.strftime("%d"))
+            file_name = start_date.strftime("%Y") + ' ' + start_date.strftime("%B") + ' ' + str(day) + '-' + str(day+1)
+            
+            # Ping the url and get its response
+            response = requests.get(export_data_url, headers=headers)
+            
+            if response.status_code == 200:
+
+                # Generate the path in which we have to save the exports
+                if base_path:
+                    save_path = base_path+  f'/{file_name}.zip'
+                else:
+                    save_path = f'/{file_name}.zip'
+                
+                # Save the export data to a file    
+                with open(save_path, 'wb') as file:
+                    file.write(response.content)
+                        
+                print(f'Export for "{file_name}" saved successfully.')
+                
+            else:
+                print(f'Error {response.status_code} while downloading {file_name} export')
+        
+        # Now, if we have the date range
+        elif len(date_range) == 2:
+            
+            # Get dates from date range tuple
+            current_date = datetime.strptime(date_range[0], '%Y-%m-%d').date()
+            end_date = datetime.strptime(date_range[1], '%Y-%m-%d').date()
+            
+            # Start a loop to get the exports
+            while current_date < end_date:
+                
+                # Check if we found a match for the current date
+                match_found = False
+                
+                for export in exports:
+                    
+                    # Check if the current_date matches with the export date
+                    if current_date == datetime.fromisoformat(export['dataStartDate']).date():
+                        match_found = True
+                        
+                        # Get export id once we have a match with the date
+                        export_id = export['id']
+                        
+                        # Generate name of the file
+                        start_date = datetime.fromisoformat(export['dataStartDate']).date()
+                        day = int(start_date.strftime("%d"))
+                        file_name = start_date.strftime("%Y") + ' ' + start_date.strftime("%B") + ' ' + str(day) + '-' + str(day+1)
+                        
+                        # Generate url and get the response after pinging the endpoint
+                        export_data_url = ep.MDH_BASE + ep.MDH_EXPORT_DATA.format(projectID=self.project_id, exportID=export_id)
+                        response = requests.get(export_data_url, headers=headers)                
+                
+                        # Checking the response of the request
+                        if response.status_code == 200:
+                            
+                            # Generate path to save the file
+                            if base_path:
+                                save_path = base_path + f'/{file_name}.zip'
+                            else:
+                                save_path = f'/{file_name}.zip'
+                            
+                            # Save the export data to a file
+                            with open(save_path, 'wb') as file:
+                                file.write(response.content)
+                                    
+                            print(f'Export for "{file_name}" saved successfully.')
+                            
+                        else:
+                            print(f'Error {response.status_code} while downloading {file_name} export')
+                    
+                        break
+                
+                # Check if we found the data in the exports list
+                if match_found == False:
+                    print(f'No data found for {current_date}')
+                
+                else:
+                    match_found = False
+                    
+                # Go to the next date
+                current_date += timedelta(days=1)
+                
+        else:
+            print('Invalid date range format. Please provide a 2-entry tuple (start_date, end_date).')
+

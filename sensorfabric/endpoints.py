@@ -11,3 +11,6 @@ MDH_EXPLORER_URL = 'https://api.explorer.mydatahelps.org/token'
 
 # Get project exports meta-data
 MDH_EXPORT_DETAILS = '/api/v1/administration/projects/{projectID}/exports'
+
+# Get incremental export data
+MDH_EXPORT_DATA = '/api/v1/administration/projects/{projectID}/exports/{exportID}/data'
