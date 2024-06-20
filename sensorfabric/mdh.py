@@ -122,29 +122,21 @@ class MDH:
         return response.json()
 
 
-    def getExplorerCreds(self, projectCode) -> dict[str, str]:
+    def getExplorerCreds(self) -> dict[str, str]:
         """
         Method which returns MDH data explorer credentials.
-
-        Parameters
-        ----------
-        1. projectCode : RK.[organization id].[Project Name]
         """
 
         if not self.isTokenAlive():
             self.genServiceToken()
 
         headers = {
-            'Authorization' : 'Bearer '+self.token,
-            'ProjectCode' : projectCode,
+            'Authorization' : self.token,
             'Accept' : 'application/json',
             'Content-Type' : 'application/json; charset=utf-8'
         }
 
-        print(headers)
-
-        response = requests.post(url=ep.MDH_EXPLORER_URL, headers=headers)
-        print(response.content)
+        response = requests.post(url=ep.MDH_EXPLORER_URL.format(projectID=self.project_id), headers=headers)
         response.raise_for_status()
 
         return response.json()

@@ -7,7 +7,7 @@ MDH_BASE = 'https://designer.mydatahelps.org'
 MDH_TOKEN_URL = 'https://designer.mydatahelps.org/identityserver/connect/token'
 
 # Endpoint for MDH explorer.
-MDH_EXPLORER_URL = 'https://api.explorer.mydatahelps.org/token'
+MDH_EXPLORER_URL = 'https://api.designer.mydatahelps.org/projects/{projectID}/export-explorer/token'
 
 # Get project exports meta-data
 MDH_EXPORT_DETAILS = '/api/v1/administration/projects/{projectID}/exports'

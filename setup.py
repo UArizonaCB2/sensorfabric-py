@@ -7,7 +7,7 @@ with open('README.md', 'r') as f:
 
 setup(
     name='sensorfabric',
-    version='3.0.0',
+    version='3.1.0',
     description='Python library for UA Sensor Fabric',
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -15,7 +15,7 @@ setup(
     url='https://github.com/UArizonaCB2/sensorfabric-py.git',
     author="Shravan Aras",
     author_email='shravanaras@arizona.edu',
-    packages=['sensorfabric'],
+    packages=find_packages(),
     keywords='sensors sensorfabric',
     python_requires='>=3',
     install_requires=[
