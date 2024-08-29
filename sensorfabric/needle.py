@@ -78,7 +78,8 @@ class Needle:
             self.mdh_configuration = {
                 'account_secret' : os.environ['MDH_SECRET'],
                 'account_name' : os.environ['MDH_ACC_NAME'],
-                'project_name' : os.environ['MDH_PROJ_NAME']
+                'project_name' : os.environ['MDH_PROJ_NAME'],
+                'project_id' : os.environ['MDH_PROJ_ID']
             }
 
         # Create the base athena connector depending on the configuration
@@ -106,7 +107,6 @@ class Needle:
             database = 'mdh_export_database_rk_{}_{}_prod'.format(self.mdh_org_id.lower(), self.mdh_configuration['project_name'])
             workgroup = 'mdh_export_database_external_prod'
             s3_location = 's3://pep-mdh-export-database-prod/execution/rk_{}_{}'.format(self.mdh_org_id.lower(), self.mdh_configuration['project_name'].lower())
-            print(database)
 
             self.db = athena(database=database,
                              workgroup=workgroup,
@@ -138,8 +138,8 @@ class Needle:
         backend.
         """
         self.mdh = MDH(self.mdh_configuration['account_secret'],
-                  self.mdh_configuration['account_name'],
-                  project_id=None)
+                       self.mdh_configuration['account_name'],
+                       self.mdh_configuration['project_id'])
         # Generate the servicetoken using the service secret.
         token = self.mdh.genServiceToken()
 
@@ -163,7 +163,7 @@ class Needle:
         a file read.
         """
         if not utils.isAWSCredValid(self.profileName) and self.method == 'mdh':
-            dataExplorer = self.mdh.getExplorerCreds('RK.'+self.mdh_org_id+'.'+self.mdh_configuration['project_name'])
+            dataExplorer = self.mdh.getExplorerCreds()
             utils.appendAWSCredentials(self.profileName, dataExplorer)
 
     def execQuery(self, queryString:str, queryParams=[],
