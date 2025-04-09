@@ -22,6 +22,7 @@ import boto3
 import pandas
 import hashlib
 import os
+import re
 
 class athena:
     """
@@ -61,17 +62,23 @@ class athena:
         if profile_name is None:
             if not ('AWS_PROFILE' in os.environ):
                 raise Exception('Could not find aws profile to use. Either set it in AWS_PROFILE or pass it explicitly using the parameter profile_name')
-            self.client = boto3.client('athena')
         else:
             # We need to use the profile name that was provided in this call.
             session = boto3.Session(profile_name=profile_name)
-            self.client = session.client('athena')
+
+        self.client = boto3.client('athena')
+        self.s3 = boto3.client('s3')
 
         self.cacheDir = '.cache'
+        self.csvDir = '.csv'
 
         if self.offlineCache:
             if not os.path.isdir(self.cacheDir):
                 os.mkdir(self.cacheDir)
+
+        # Let's go ahead and also make the CSV directory.
+        if not os.path.isdir(self.csvDir):
+            os.mkdir(self.csvDir)
 
     """
     Description
@@ -89,7 +96,8 @@ class athena:
     -------
     1. QueryExecutionId : A string with query execution id.
     """
-    def startQueryExec(self, queryString:str, queryParams=[], cached=False) -> str:
+    def startQueryExec(self, queryString:str, queryParams=[],
+                       cached=False) -> str:
 
         # Selectively add the resultconfiguration.
         ResultConfiguration = {}
@@ -103,7 +111,7 @@ class athena:
                 'Catalog' : self.catalog
             },
             WorkGroup = self.workgroup,
-            ResultConfiguration = ResultConfiguration
+            ResultConfiguration = ResultConfiguration,
         )
 
         return result['QueryExecutionId']
@@ -201,6 +209,9 @@ class athena:
                 offlineCache=True must be passed during object creation. Else this option is
                 ignored.
     4. defaultTimeout : Query execution timeout. Default is 60 seconds.
+    5. s3Transfer : True | False (default) Enable for large queries.
+        When enabled (True) large query results
+        are downloaded locally directly via S3 file transfers into .csv/ folder.
 
     Returns
     -------
@@ -208,10 +219,8 @@ class athena:
     this will return an empty pandas frame.
     """
     def execQuery(self, queryString:str, queryParams=[],
-                  cached=False, defaultTimeout=60) -> pandas.DataFrame:
-        executionId = self.startQueryExec(queryString,
-                                          queryParams,
-                                          cached)
+                  cached=False, defaultTimeout=60,
+                  s3Transfer=False) -> pandas.DataFrame:
 
         # Check if we have requested cached results and we are setup for serving cache results (offlineCache=True)
         if self.offlineCache and cached:
@@ -222,7 +231,14 @@ class athena:
                 frame = pandas.read_csv(open(path, 'r'))
                 return frame
 
+        # Results were not cached / cache disabled so we go ahead and run this query.
+        executionId = self.startQueryExec(queryString,
+                                        queryParams,
+                                        cached)
+
         state = None
+        # A busy loop that waits for the query execution to finish either with success,
+        # failure or cancelation.
         while True:
             response = self.client.get_query_execution(QueryExecutionId=executionId)
             state = response['QueryExecution']['Status']['State']
@@ -235,6 +251,32 @@ class athena:
         if state == 'CANCELLED':
             # Return query cancelled execution.
             pass
+
+        # If we have s3Transfer enabled then let's go ahead and directly transfer the s3
+        # file locally and read data from it.
+        if s3Transfer:
+            match = re.search(r's3://([^/]+)/(.+)', self.s3_location)
+            bucketName = None
+            objPath = None
+            if match:
+               bucketName = match.group(1)
+               objPath = match.group(2)
+
+            if bucketName and objPath:
+                # Because we use .csv as the extension, the S3 file is a .txt which can happen
+                # for table meta-data (example: show table) queries this will not work.
+                # But those are small queries and we can fall through to the classical method below.
+                localPath = f'{self.csvDir}/{executionId}.csv'
+                self.s3.download_file(bucketName,
+                                      f'{objPath}/{executionId}.csv',
+                                      localPath)
+
+                if os.path.isfile(localPath):
+                    # Load it into a dataframe and ship it out to the user
+                    with open(localPath, 'r') as f:
+                       frame = pandas.read_csv(f)
+                       if frame.shape[0] > 0:
+                           return frame
 
         # TODO: Give users the option to stop pagination, or alert them that this is a big
         #       query and can lead to pagination / memory hog.
