@@ -14,3 +14,6 @@ MDH_EXPORT_DETAILS = '/api/v1/administration/projects/{projectID}/exports'
 
 # Get incremental export data
 MDH_EXPORT_DATA = '/api/v1/administration/projects/{projectID}/exports/{exportID}/data'
+
+# MDH admin endpoint
+MDH_PROJ= '/api/v1/administration/projects/{projectID}/'

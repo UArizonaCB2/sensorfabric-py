@@ -116,10 +116,24 @@ class MDH:
             'Content-Type' : 'application/json; charset=utf-8'
         }
 
-        response = requests.get(url=endpoint, headers=headers)
+        response = requests.get(url=endpoint, headers=headers, params=params)
         response.raise_for_status()
 
         return response.json()
+
+    def getAllParticipants(self, queryParam=None):
+        """
+        Method which returns all participant information.
+        TODO: Support multi-page outputs automatically. Right now the caller needs to track
+              total participants, pageSize and current pageNumber
+        """
+        if not self.isTokenAlive():
+            self.genServiceToken()
+
+        url = ep.MDH_BASE + ep.MDH_PROJ + '/participants'
+
+        return self.makeGetRequests(url.format(projectID=self.project_id),
+                                    params=queryParam)
 
 
     def getExplorerCreds(self) -> dict[str, str]:
@@ -142,11 +156,8 @@ class MDH:
         return response.json()
 
     def getExports(self, pageNumber, pageSize):
-        """
-        Method which gets all the export meta-data for a project.
-        """
-
-        return self.makeGetRequests(ep.MDH_BASE + 
+        """Method which gets all the export meta-data for a project."""
+        return self.makeGetRequests(ep.MDH_BASE +
                                     ep.MDH_EXPORT_DETAILS.format(projectID=self.project_id) +
                                     '?pageNumber={pageNumber}&pageSize={pageSize}'.format(pageNumber=pageNumber,
                                                                                           pageSize=pageSize))
