@@ -131,7 +131,7 @@ class MDH:
             self.genServiceToken()
 
         url = ep.MDH_BASE + ep.MDH_PROJ + '/participants'
-
+        
         return self.makeGetRequests(url.format(projectID=self.project_id),
                                     params=queryParam)
 
