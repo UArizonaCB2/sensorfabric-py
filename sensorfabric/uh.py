@@ -26,8 +26,8 @@ class UltrahumanAPI:
             'api_key': 'eyJhbGciOiJIUzI1NiJ9.eyJzZWNyZXQiOiJjZGM5MjdkYjQ3ZjA5ZDhhNzQxYiIsImV4cCI6MjQzMDEzNTM5Nn0.x3SqFIubvafBxZ1GxvPRqHCd0CLa4_jip8LHbopzLsQ'
         },
         'production': {
-            'base_url': None,  # Must be set via environment variable
-            'api_key': None    # Must be set via environment variable
+            'base_url': os.getenv("UH_PROD_BASE_URL", None),  # Must be set via environment variable
+            'api_key': os.getenv("UH_PROD_API_KEY", None)    # Must be set via environment variable
         }
     }
     
