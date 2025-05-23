@@ -124,16 +124,66 @@ class MDH:
     def getAllParticipants(self, queryParam=None):
         """
         Method which returns all participant information.
-        TODO: Support multi-page outputs automatically. Right now the caller needs to track
-              total participants, pageSize and current pageNumber
+        Automatically handles pagination to fetch all participants across multiple pages.
+        
+        Parameters
+        ----------
+        queryParam : dict, optional
+            Additional query parameters for the API request
+            
+        Returns
+        -------
+        dict
+            Dictionary containing all participants with the following structure:
+            {
+                "totalParticipants": int,
+                "participants": [list of all participant objects]
+            }
         """
         if not self.isTokenAlive():
             self.genServiceToken()
 
         url = ep.MDH_BASE + ep.MDH_PROJ + '/participants'
         
-        return self.makeGetRequests(url.format(projectID=self.project_id),
-                                    params=queryParam)
+        # Initialize pagination parameters
+        page_number = 0
+        page_size = 100  # Use a reasonable page size
+        all_participants = []
+        total_participants = None
+        
+        # Build query parameters
+        if queryParam is None:
+            queryParam = {}
+        
+        while True:
+            # Add pagination parameters to query
+            current_params = queryParam.copy()
+            current_params['pageNumber'] = page_number
+            current_params['pageSize'] = page_size
+            
+            # Make the API request
+            response = self.makeGetRequests(url.format(projectID=self.project_id),
+                                          params=current_params)
+            
+            # Extract participants from current page
+            page_participants = response.get('participants', [])
+            all_participants.extend(page_participants)
+            
+            # Set total count on first page
+            if total_participants is None:
+                total_participants = response.get('totalParticipants', 0)
+            
+            # Check if we've retrieved all participants
+            if len(all_participants) >= total_participants or len(page_participants) == 0:
+                break
+                
+            # Move to next page
+            page_number += 1
+        
+        return {
+            'totalParticipants': total_participants,
+            'participants': all_participants
+        }
 
 
     def getExplorerCreds(self) -> dict[str, str]:
