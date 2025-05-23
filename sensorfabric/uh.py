@@ -7,6 +7,9 @@ import io
 import re
 
 
+DEVELOPMENT_EMAIL = DEVELOPMENT_EMAIL
+
+
 class UltrahumanAPI:
     """
     API client for Ultrahuman metrics data.
@@ -43,15 +46,15 @@ class UltrahumanAPI:
         """
         if date is None:
             # Default to today's date
-            return datetime.now().strftime('%d/%m/%Y')
+            return datetime.now().strftime('%Y-%m-%d')
         
-        # If already in DD/MM/YYYY format, validate and return
-        if re.match(r'^\d{2}/\d{2}/\d{4}$', date):
+        # If already in YYYY-MM-DD format, validate and return
+        if re.match(r'^\d{4}-\d{2}-\d{2}$', date):
             try:
-                datetime.strptime(date, '%d/%m/%Y')
+                datetime.strptime(date, '%Y-%m-%d')
                 return date
             except ValueError:
-                raise ValueError(f"Invalid date: {date}. Expected DD/MM/YYYY format.")
+                raise ValueError(f"Invalid date: {date}. Expected YYYY-MM-DD format.")
         
         # Try to parse various date formats
         date_formats = [
@@ -63,11 +66,11 @@ class UltrahumanAPI:
             '%d-%m-%Y',        # DD-MM-YYYY
             '%Y%m%d',          # YYYYMMDD
         ]
-        
+
         for fmt in date_formats:
             try:
                 parsed_date = datetime.strptime(date, fmt)
-                return parsed_date.strftime('%d/%m/%Y')
+                return parsed_date.strftime('%Y-%m-%d')
             except ValueError:
                 continue
         
@@ -146,6 +149,10 @@ class UltrahumanAPI:
             If the response is not valid JSON or date is invalid
         """
         formatted_date = self._validate_and_format_date(date)
+        
+        if self.environment == 'development':
+            email = DEVELOPMENT_EMAIL
+
         headers = {
             'Authorization': self.api_key
         }
@@ -195,8 +202,11 @@ class UltrahumanAPI:
             If the response cannot be converted to DataFrame or date is invalid
         """
         formatted_date = self._validate_and_format_date(date)
+        if self.environment == 'development':
+            email = DEVELOPMENT_EMAIL
+
         metrics_data = self.get_metrics(email, formatted_date)
-        
+
         try:
             # Convert JSON response to DataFrame
             # Handle different possible response structures
@@ -284,6 +294,8 @@ def get_participant_metrics(email: str, date: Optional[str] = None, environment:
         JSON response from the API
     """
     client = UltrahumanAPI(environment=environment)
+    if environment == 'development':
+        email = DEVELOPMENT_EMAIL
     return client.get_metrics(email, date)
 
 
@@ -307,4 +319,6 @@ def get_participant_metrics_parquet(email: str, date: Optional[str] = None, envi
         Parquet file content as bytes
     """
     client = UltrahumanAPI(environment=environment)
+    if environment == 'development':
+        email = DEVELOPMENT_EMAIL
     return client.get_metrics_as_parquet(email, date)
