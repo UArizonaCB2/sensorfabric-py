@@ -143,7 +143,7 @@ class MDH:
         if not self.isTokenAlive():
             self.genServiceToken()
 
-        url = ep.MDH_BASE + ep.MDH_PROJ + '/participants'
+        url = ep.MDH_BASE + ep.MDH_PROJ + 'participants'
         
         # Initialize pagination parameters
         page_number = 0
