@@ -4,6 +4,7 @@ import pandas as pd
 from datetime import datetime
 from typing import Optional, Dict, Any
 import io
+import re
 
 
 class UltrahumanAPI:
@@ -18,6 +19,59 @@ class UltrahumanAPI:
     - UH_PROD_API_KEY: API key for production environment  
     - UH_PROD_BASE_URL: Base URL for production environment
     """
+    
+    @staticmethod
+    def _validate_and_format_date(date: Optional[str] = None) -> str:
+        """
+        Validate and format date input.
+        
+        Parameters
+        ----------
+        date : str, optional
+            Date in various formats (ISO8601, DD/MM/YYYY, etc.).
+            If None, defaults to today's date.
+            
+        Returns
+        -------
+        str
+            Date in DD/MM/YYYY format required by the API
+            
+        Raises
+        ------
+        ValueError
+            If the date string is invalid
+        """
+        if date is None:
+            # Default to today's date
+            return datetime.now().strftime('%d/%m/%Y')
+        
+        # If already in DD/MM/YYYY format, validate and return
+        if re.match(r'^\d{2}/\d{2}/\d{4}$', date):
+            try:
+                datetime.strptime(date, '%d/%m/%Y')
+                return date
+            except ValueError:
+                raise ValueError(f"Invalid date: {date}. Expected DD/MM/YYYY format.")
+        
+        # Try to parse various date formats
+        date_formats = [
+            '%Y-%m-%d',        # ISO8601 YYYY-MM-DD
+            '%Y-%m-%dT%H:%M:%S',  # ISO8601 with time
+            '%Y-%m-%dT%H:%M:%SZ', # ISO8601 with time and Z
+            '%Y-%m-%d %H:%M:%S',  # YYYY-MM-DD HH:MM:SS
+            '%m/%d/%Y',        # MM/DD/YYYY (US format)
+            '%d-%m-%Y',        # DD-MM-YYYY
+            '%Y%m%d',          # YYYYMMDD
+        ]
+        
+        for fmt in date_formats:
+            try:
+                parsed_date = datetime.strptime(date, fmt)
+                return parsed_date.strftime('%d/%m/%Y')
+            except ValueError:
+                continue
+        
+        raise ValueError(f"Unable to parse date: {date}. Supported formats include ISO8601 (YYYY-MM-DD), DD/MM/YYYY, MM/DD/YYYY, and others.")
     
     # Default configurations
     DEFAULT_CONFIGS = {
@@ -67,7 +121,7 @@ class UltrahumanAPI:
             if not self.api_key:
                 raise ValueError("UH_PROD_API_KEY environment variable must be set for production")
     
-    def get_metrics(self, email: str, date: str) -> Dict[str, Any]:
+    def get_metrics(self, email: str, date: Optional[str] = None) -> Dict[str, Any]:
         """
         Fetch metrics data for a participant.
         
@@ -75,8 +129,9 @@ class UltrahumanAPI:
         ----------
         email : str
             Participant email address
-        date : str
-            Date in DD/MM/YYYY format (e.g., '23/12/2022')
+        date : str, optional
+            Date in various formats (ISO8601, DD/MM/YYYY, etc.).
+            Defaults to today's date if not provided.
             
         Returns
         -------
@@ -88,15 +143,16 @@ class UltrahumanAPI:
         requests.RequestException
             If the API request fails
         ValueError
-            If the response is not valid JSON
+            If the response is not valid JSON or date is invalid
         """
+        formatted_date = self._validate_and_format_date(date)
         headers = {
             'Authorization': self.api_key
         }
         
         params = {
             'email': email,
-            'date': date
+            'date': formatted_date
         }
         
         try:
@@ -114,7 +170,7 @@ class UltrahumanAPI:
         except ValueError as e:
             raise ValueError(f"Invalid JSON response: {e}")
     
-    def get_metrics_as_parquet(self, email: str, date: str) -> bytes:
+    def get_metrics_as_parquet(self, email: str, date: Optional[str] = None) -> bytes:
         """
         Fetch metrics data and return as parquet file bytes.
         
@@ -122,8 +178,9 @@ class UltrahumanAPI:
         ----------
         email : str
             Participant email address
-        date : str
-            Date in DD/MM/YYYY format (e.g., '23/12/2022')
+        date : str, optional
+            Date in various formats (ISO8601, DD/MM/YYYY, etc.).
+            Defaults to today's date if not provided.
             
         Returns
         -------
@@ -135,9 +192,10 @@ class UltrahumanAPI:
         requests.RequestException
             If the API request fails
         ValueError
-            If the response cannot be converted to DataFrame
+            If the response cannot be converted to DataFrame or date is invalid
         """
-        metrics_data = self.get_metrics(email, date)
+        formatted_date = self._validate_and_format_date(date)
+        metrics_data = self.get_metrics(email, formatted_date)
         
         try:
             # Convert JSON response to DataFrame
@@ -161,7 +219,7 @@ class UltrahumanAPI:
             # Add metadata columns
             df['fetch_timestamp'] = datetime.now().isoformat()
             df['participant_email'] = email
-            df['request_date'] = date
+            df['request_date'] = formatted_date
             
             # Convert to parquet bytes
             buffer = io.BytesIO()
@@ -171,7 +229,7 @@ class UltrahumanAPI:
         except Exception as e:
             raise ValueError(f"Failed to convert response to parquet: {e}")
     
-    def save_metrics_parquet(self, email: str, date: str, filename: Optional[str] = None) -> str:
+    def save_metrics_parquet(self, email: str, date: Optional[str] = None, filename: Optional[str] = None) -> str:
         """
         Fetch metrics data and save as parquet file.
         
@@ -179,8 +237,9 @@ class UltrahumanAPI:
         ----------
         email : str
             Participant email address
-        date : str
-            Date in DD/MM/YYYY format (e.g., '23/12/2022')
+        date : str, optional
+            Date in various formats (ISO8601, DD/MM/YYYY, etc.).
+            Defaults to today's date if not provided.
         filename : str, optional
             Output filename. If not provided, generates one based on email and date.
             
@@ -189,13 +248,14 @@ class UltrahumanAPI:
         str
             Path to the saved parquet file
         """
+        formatted_date = self._validate_and_format_date(date)
         if filename is None:
             # Generate filename from email and date
             safe_email = email.replace('@', '_at_').replace('.', '_')
-            safe_date = date.replace('/', '-')
+            safe_date = formatted_date.replace('/', '-')
             filename = f"ultrahuman_metrics_{safe_email}_{safe_date}.parquet"
         
-        parquet_bytes = self.get_metrics_as_parquet(email, date)
+        parquet_bytes = self.get_metrics_as_parquet(email, formatted_date)
         
         with open(filename, 'wb') as f:
             f.write(parquet_bytes)
@@ -204,7 +264,7 @@ class UltrahumanAPI:
 
 
 # Convenience functions for quick access
-def get_participant_metrics(email: str, date: str, environment: str = 'development') -> Dict[str, Any]:
+def get_participant_metrics(email: str, date: Optional[str] = None, environment: str = 'development') -> Dict[str, Any]:
     """
     Convenience function to get metrics data for a participant.
     
@@ -212,8 +272,9 @@ def get_participant_metrics(email: str, date: str, environment: str = 'developme
     ----------
     email : str
         Participant email address
-    date : str
-        Date in DD/MM/YYYY format
+    date : str, optional
+        Date in various formats (ISO8601, DD/MM/YYYY, etc.).
+        Defaults to today's date if not provided.
     environment : str
         Environment to use ('development' or 'production')
         
@@ -226,7 +287,7 @@ def get_participant_metrics(email: str, date: str, environment: str = 'developme
     return client.get_metrics(email, date)
 
 
-def get_participant_metrics_parquet(email: str, date: str, environment: str = 'development') -> bytes:
+def get_participant_metrics_parquet(email: str, date: Optional[str] = None, environment: str = 'development') -> bytes:
     """
     Convenience function to get metrics data as parquet bytes.
     
@@ -234,8 +295,9 @@ def get_participant_metrics_parquet(email: str, date: str, environment: str = 'd
     ----------
     email : str
         Participant email address
-    date : str
-        Date in DD/MM/YYYY format
+    date : str, optional
+        Date in various formats (ISO8601, DD/MM/YYYY, etc.).
+        Defaults to today's date if not provided.
     environment : str
         Environment to use ('development' or 'production')
         
