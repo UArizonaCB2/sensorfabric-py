@@ -7,7 +7,7 @@ import io
 import re
 
 
-DEVELOPMENT_EMAIL = DEVELOPMENT_EMAIL
+DEVELOPMENT_EMAIL = "shresth@ultrahuman.com"
 
 
 class UltrahumanAPI:
