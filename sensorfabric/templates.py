@@ -1,3 +1,230 @@
+from jinja2 import Template
+from datetime import datetime
+from typing import Dict, List, Any, Optional
+
+
+def generate_weekly_report_template(
+    json_data: List[Dict[str, Any]], 
+    weeks_enrolled: int,
+    current_pregnancy_week: int,
+    ring_wear_percentage: float,
+    surveys_completed: int,
+    total_surveys: int,
+    enrolled_date: str,
+    last_week_data: Optional[Dict] = None
+) -> str:
+    """
+    Generate a Jinja2 HTML template for weekly health reports from Ultrahuman API data.
+    
+    Args:
+        json_data: List of sensor data objects from Ultrahuman API
+        weeks_enrolled: Number of weeks participant has been enrolled
+        current_pregnancy_week: Current week of pregnancy
+        ring_wear_percentage: Percentage of time ring was worn
+        surveys_completed: Number of surveys completed this week
+        total_surveys: Total number of surveys available
+        enrolled_date: Date when participant enrolled
+        last_week_data: Optional data from previous week for trend comparison
+        
+    Returns:
+        HTML string with populated template
+    """
+    
+    # Process the JSON data to extract metrics
+    metrics = _process_sensor_data(json_data, last_week_data)
+    
+    template_str = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Weekly Health Report</title>
+        <style>
+            body { font-family: Arial, sans-serif; margin: 20px; }
+            .metric { margin: 10px 0; padding: 10px; background-color: #f5f5f5; border-radius: 5px; }
+            .trend-positive { color: green; }
+            .trend-negative { color: red; }
+            .trend-neutral { color: #666; }
+        </style>
+    </head>
+    <body>
+        <h1>Weekly Health Report</h1>
+        
+        <div class="metric">
+            <strong>Enrollment Status:</strong> {{ weeks_enrolled }} weeks enrolled
+        </div>
+        
+        <div class="metric">
+            <strong>Pregnancy Progress:</strong> {{ current_pregnancy_week }} weeks - {{ current_pregnancy_week + 1 }} weeks pregnant
+        </div>
+        
+        <div class="metric">
+            <strong>Device Usage:</strong> {{ "%.0f"|format(ring_wear_percentage) }}% ring wear time
+        </div>
+        
+        <div class="metric">
+            <strong>Survey Completion:</strong> {{ surveys_completed }} of {{ total_surveys }} surveys completed
+        </div>
+        
+        {% if metrics.blood_pressure %}
+        <div class="metric">
+            <strong>Blood Pressure:</strong> You recorded {{ metrics.blood_pressure.count }} blood pressures this week. 
+            Blood pressure trend: {{ metrics.blood_pressure.trend }} as last week. 
+            Number of blood pressures over 140/90 = {{ metrics.blood_pressure.high_readings or "none" }}
+        </div>
+        {% endif %}
+        
+        {% if metrics.heart_rate %}
+        <div class="metric">
+            <strong>Heart Rate:</strong> {{ metrics.heart_rate.total_beats }} heart beats recorded. 
+            Average resting heart rate of {{ "%.0f"|format(metrics.heart_rate.avg_resting) }}
+        </div>
+        {% endif %}
+        
+        {% if metrics.temperature %}
+        <div class="metric">
+            <strong>Temperature:</strong> Total temperature readings = {{ metrics.temperature.total_readings }}. 
+            Trending = {{ metrics.temperature.trend }}
+            <br>
+            {{ metrics.temperature.fever_readings or "No" }} temperatures over 100.0°F recorded
+        </div>
+        {% endif %}
+        
+        {% if metrics.sleep %}
+        <div class="metric">
+            <strong>Sleep:</strong> {{ "%.1f"|format(metrics.sleep.total_hours) }} hours of sleep this week. 
+            Average {{ "%.1f"|format(metrics.sleep.avg_per_night) }} per night.
+        </div>
+        {% endif %}
+        
+        {% if metrics.weight %}
+        <div class="metric">
+            <strong>Weight:</strong> Change in weight this week = {{ metrics.weight.weekly_change }} lbs. 
+            Total change {{ metrics.weight.total_change }} lbs since {{ enrolled_date }}
+        </div>
+        {% endif %}
+        
+        {% if metrics.movement %}
+        <div class="metric">
+            <strong>Movement:</strong> Total movement this week = {{ "%.0f"|format(metrics.movement.total_minutes) }} minutes. 
+            Average steps per day = {{ "%.0f"|format(metrics.movement.avg_steps_per_day) }}
+            <br>
+            Trend - {{ "%.0f"|format(abs(metrics.movement.step_trend)) }} 
+            {{ "fewer" if metrics.movement.step_trend < 0 else "more" }} than last week
+        </div>
+        {% endif %}
+        
+        <div class="metric">
+            <small>Report generated on {{ report_date }}</small>
+        </div>
+    </body>
+    </html>
+    """
+    
+    template = Template(template_str)
+    
+    return template.render(
+        weeks_enrolled=weeks_enrolled,
+        current_pregnancy_week=current_pregnancy_week,
+        ring_wear_percentage=ring_wear_percentage,
+        surveys_completed=surveys_completed,
+        total_surveys=total_surveys,
+        enrolled_date=enrolled_date,
+        metrics=metrics,
+        report_date=datetime.now().strftime("%Y-%m-%d %H:%M")
+    )
+
+
+def _process_sensor_data(json_data: List[Dict[str, Any]], last_week_data: Optional[Dict] = None) -> Dict[str, Any]:
+    """Process sensor data and calculate metrics for the template."""
+    
+    metrics = {}
+    
+    for item in json_data:
+        data_type = item.get('type')
+        obj = item.get('object', {})
+        
+        if data_type == 'hr':
+            metrics['heart_rate'] = _process_heart_rate(obj)
+        elif data_type == 'temp':
+            metrics['temperature'] = _process_temperature(obj)
+        elif data_type == 'steps':
+            metrics['movement'] = _process_movement(obj, last_week_data)
+        elif data_type == 'motion':
+            metrics['sleep'] = _process_sleep(obj)
+    
+    return metrics
+
+
+def _process_heart_rate(hr_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Process heart rate data."""
+    values = hr_data.get('values', [])
+    total_beats = sum(val['value'] for val in values) * 60  # Approximate total beats
+    avg_resting = sum(val['value'] for val in values) / len(values) if values else 0
+    
+    return {
+        'total_beats': total_beats,
+        'avg_resting': avg_resting
+    }
+
+
+def _process_temperature(temp_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Process temperature data."""
+    values = temp_data.get('values', [])
+    total_readings = len(values)
+    
+    # Convert Celsius to Fahrenheit and check for fever
+    fever_count = 0
+    for val in values:
+        temp_f = (val['value'] * 9/5) + 32
+        if temp_f > 100.0:
+            fever_count += 1
+    
+    return {
+        'total_readings': total_readings,
+        'trend': 'steady',  # Could be calculated from trend data if available
+        'fever_readings': fever_count if fever_count > 0 else None
+    }
+
+
+def _process_movement(movement_data: Dict[str, Any], last_week_data: Optional[Dict] = None) -> Dict[str, Any]:
+    """Process movement/steps data."""
+    values = movement_data.get('values', [])
+    total_steps = sum(val['value'] for val in values)
+    avg_steps_per_day = total_steps / 7 if total_steps > 0 else 0
+    total_minutes = total_steps * 0.5  # Approximate minutes based on steps
+    
+    # Calculate trend vs last week
+    step_trend = 0
+    if last_week_data and 'steps' in last_week_data:
+        last_week_steps = last_week_data['steps']
+        step_trend = total_steps - last_week_steps
+    
+    return {
+        'total_minutes': total_minutes,
+        'avg_steps_per_day': avg_steps_per_day,
+        'step_trend': step_trend
+    }
+
+
+def _process_sleep(motion_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Process sleep data from motion object."""
+    sleep_graph = motion_data.get('sleep_graph', {})
+    sleep_data = sleep_graph.get('data', [])
+    
+    total_sleep_seconds = 0
+    for stage in sleep_data:
+        if stage['type'] in ['light_sleep', 'deep_sleep']:
+            total_sleep_seconds += stage['end'] - stage['start']
+    
+    total_hours = total_sleep_seconds / 3600
+    avg_per_night = total_hours / 7
+    
+    return {
+        'total_hours': total_hours,
+        'avg_per_night': avg_per_night
+    }
+
+
 ### json data from ultrahuman API:
 # 
 # [
