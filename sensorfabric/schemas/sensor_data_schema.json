@@ -1,0 +1,202 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.com/sensor-data-schema.json",
+  "title": "Sensor Data Schema",
+  "description": "Schema for sensor fabric data containing various sensor types and their measurements",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "type": {
+        "type": "string",
+        "enum": ["hr", "temp", "hrv", "steps", "motion"],
+        "description": "The type of sensor data"
+      },
+      "object": {
+        "type": "object",
+        "properties": {
+          "day_start_timestamp": {
+            "type": "integer",
+            "description": "Unix timestamp for the start of the day"
+          },
+          "title": {
+            "type": "string",
+            "description": "Human readable title for the sensor data"
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "value": {
+                  "type": "number",
+                  "description": "The measured value"
+                },
+                "timestamp": {
+                  "type": "integer",
+                  "description": "Unix timestamp when the measurement was taken"
+                }
+              },
+              "required": ["value", "timestamp"],
+              "additionalProperties": false
+            },
+            "description": "Array of timestamped sensor values"
+          },
+          "last_reading": {
+            "type": "number",
+            "description": "The most recent sensor reading"
+          },
+          "unit": {
+            "type": "string",
+            "description": "Unit of measurement (e.g., BPM, °C)"
+          },
+          "subtitle": {
+            "type": "string",
+            "description": "Subtitle for the data (e.g., Average)"
+          },
+          "avg": {
+            "type": "number",
+            "description": "Average value"
+          },
+          "trend_title": {
+            "type": "string",
+            "description": "Trend indicator (e.g., +5, -14)"
+          },
+          "trend_direction": {
+            "type": "string",
+            "enum": ["positive", "negative", "neutral"],
+            "description": "Direction of the trend"
+          },
+          "sleep_graph": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string",
+                "description": "Title for sleep graph"
+              },
+              "data": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "start": {
+                      "type": "integer",
+                      "description": "Start timestamp for sleep stage"
+                    },
+                    "end": {
+                      "type": "integer",
+                      "description": "End timestamp for sleep stage"
+                    },
+                    "type": {
+                      "type": "string",
+                      "enum": ["awake", "light_sleep", "deep_sleep", "rem_sleep"],
+                      "description": "Type of sleep stage"
+                    }
+                  },
+                  "required": ["start", "end", "type"],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": ["title", "data"],
+            "additionalProperties": false
+          },
+          "hr_graph": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string",
+                "description": "Title for heart rate graph"
+              },
+              "data": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "timestamp": {
+                      "type": "integer",
+                      "description": "Timestamp for HR measurement"
+                    },
+                    "value": {
+                      "type": "number",
+                      "description": "Heart rate value"
+                    }
+                  },
+                  "required": ["timestamp", "value"],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": ["title", "data"],
+            "additionalProperties": false
+          },
+          "hrv_graph": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string",
+                "description": "Title for HRV graph"
+              },
+              "data": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "timestamp": {
+                      "type": "integer",
+                      "description": "Timestamp for HRV measurement"
+                    },
+                    "value": {
+                      "type": "number",
+                      "description": "HRV value"
+                    }
+                  },
+                  "required": ["timestamp", "value"],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": ["title", "data"],
+            "additionalProperties": false
+          },
+          "summary": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "title": {
+                  "type": "string",
+                  "description": "Title of the summary metric"
+                },
+                "state": {
+                  "type": "string",
+                  "enum": ["optimal", "good", "warning", "poor"],
+                  "description": "State of the metric"
+                },
+                "state_title": {
+                  "type": "string",
+                  "description": "Human readable state description"
+                },
+                "score": {
+                  "type": "number",
+                  "description": "Numeric score for the metric"
+                },
+                "education_modal_deeplink": {
+                  "type": "string",
+                  "format": "uri",
+                  "description": "Deep link to educational content"
+                }
+              },
+              "required": ["title", "state", "state_title", "score"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["day_start_timestamp"],
+        "additionalProperties": false
+      }
+    },
+    "required": ["type", "object"],
+    "additionalProperties": false
+  }
+}
