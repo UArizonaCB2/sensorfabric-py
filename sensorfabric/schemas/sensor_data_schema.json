@@ -1,5 +1,5 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://example.com/sensor-data-schema.json",
   "title": "Sensor Data Schema",
   "description": "Schema for sensor fabric data containing various sensor types and their measurements",
@@ -38,7 +38,7 @@
                 }
               },
               "required": ["value", "timestamp"],
-              "additionalProperties": false
+              "unevaluatedProperties": false
             },
             "description": "Array of timestamped sensor values"
           },
@@ -94,12 +94,12 @@
                     }
                   },
                   "required": ["start", "end", "type"],
-                  "additionalProperties": false
+                  "unevaluatedProperties": false
                 }
               }
             },
             "required": ["title", "data"],
-            "additionalProperties": false
+            "unevaluatedProperties": false
           },
           "hr_graph": {
             "type": "object",
@@ -123,12 +123,12 @@
                     }
                   },
                   "required": ["timestamp", "value"],
-                  "additionalProperties": false
+                  "unevaluatedProperties": false
                 }
               }
             },
             "required": ["title", "data"],
-            "additionalProperties": false
+            "unevaluatedProperties": false
           },
           "hrv_graph": {
             "type": "object",
@@ -152,12 +152,12 @@
                     }
                   },
                   "required": ["timestamp", "value"],
-                  "additionalProperties": false
+                  "unevaluatedProperties": false
                 }
               }
             },
             "required": ["title", "data"],
-            "additionalProperties": false
+            "unevaluatedProperties": false
           },
           "summary": {
             "type": "array",
@@ -188,15 +188,15 @@
                 }
               },
               "required": ["title", "state", "state_title", "score"],
-              "additionalProperties": false
+              "unevaluatedProperties": false
             }
           }
         },
         "required": ["day_start_timestamp"],
-        "additionalProperties": false
+        "unevaluatedProperties": false
       }
     },
     "required": ["type", "object"],
-    "additionalProperties": false
+    "unevaluatedProperties": false
   }
 }
