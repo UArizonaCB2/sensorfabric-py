@@ -415,7 +415,8 @@ class SensorFabricGlue:
                 'week_end': self.week_end.isoformat(),
                 'participants_processed': len(participant_data),
                 'reports_generated': len(reports),
-                'data_uploaded': sum(len(data['daily_data']) for data in participant_data.values())
+                'total_records_processed': sum(data.get('total_records', 0) for data in participant_data.values()),
+                'data_files_found': sum(len(data['daily_data']) for data in participant_data.values())
             }
             
         except Exception as e:

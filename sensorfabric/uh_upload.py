@@ -191,7 +191,7 @@ class UltrahumanDataUploader:
                 
                 if result['success']:
                     successful_uploads += 1
-                    total_data_size += result.get('data_size', 0)
+                    total_data_size += result.get('record_count', 0)
                 else:
                     failed_uploads += 1
             
@@ -202,7 +202,7 @@ class UltrahumanDataUploader:
                 'participants_processed': len(participants),
                 'successful_uploads': successful_uploads,
                 'failed_uploads': failed_uploads,
-                'total_data_size_bytes': total_data_size,
+                'total_records_uploaded': total_data_size,
                 'results': results
             }
             
