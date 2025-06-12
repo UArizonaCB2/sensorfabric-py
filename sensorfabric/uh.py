@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Optional, Dict, Any
 import io
 import re
+import awswrangler as wr
 
 
 DEVELOPMENT_EMAIL = "shresth@ultrahuman.com"
@@ -177,9 +178,9 @@ class UltrahumanAPI:
         except ValueError as e:
             raise ValueError(f"Invalid JSON response: {e}")
     
-    def get_metrics_as_parquet(self, email: str, date: Optional[str] = None) -> bytes:
+    def get_metrics_as_dataframe(self, email: str, date: Optional[str] = None) -> pd.DataFrame:
         """
-        Fetch metrics data and return as parquet file bytes.
+        Fetch metrics data and return as pandas DataFrame.
         
         Parameters
         ----------
@@ -191,8 +192,8 @@ class UltrahumanAPI:
             
         Returns
         -------
-        bytes
-            Parquet file content as bytes
+        pd.DataFrame
+            DataFrame containing the metrics data
             
         Raises
         ------
@@ -231,13 +232,96 @@ class UltrahumanAPI:
             df['participant_email'] = email
             df['request_date'] = formatted_date
             
-            # Convert to parquet bytes
+            return df
+            
+        except Exception as e:
+            raise ValueError(f"Failed to convert response to DataFrame: {e}")
+
+    def get_metrics_as_parquet(self, email: str, date: Optional[str] = None) -> bytes:
+        """
+        Fetch metrics data and return as parquet file bytes.
+        
+        Parameters
+        ----------
+        email : str
+            Participant email address
+        date : str, optional
+            Date in various formats (ISO8601, DD/MM/YYYY, etc.).
+            Defaults to today's date if not provided.
+            
+        Returns
+        -------
+        bytes
+            Parquet file content as bytes
+            
+        Raises
+        ------
+        requests.RequestException
+            If the API request fails
+        ValueError
+            If the response cannot be converted to DataFrame or date is invalid
+        """
+        df = self.get_metrics_as_dataframe(email, date)
+        
+        try:
+            # Convert to parquet bytes using awswrangler
             buffer = io.BytesIO()
             df.to_parquet(buffer, index=False)
             return buffer.getvalue()
             
         except Exception as e:
-            raise ValueError(f"Failed to convert response to parquet: {e}")
+            raise ValueError(f"Failed to convert DataFrame to parquet: {e}")
+
+    def save_metrics_to_s3(self, email: str, date: Optional[str] = None, 
+                          s3_path: str = None, bucket: str = None, key: str = None) -> str:
+        """
+        Fetch metrics data and save directly to S3 as parquet.
+        
+        Parameters
+        ----------
+        email : str
+            Participant email address
+        date : str, optional
+            Date in various formats (ISO8601, DD/MM/YYYY, etc.).
+            Defaults to today's date if not provided.
+        s3_path : str, optional
+            Full S3 path (s3://bucket/key). If provided, bucket and key are ignored.
+        bucket : str, optional
+            S3 bucket name. Required if s3_path not provided.
+        key : str, optional
+            S3 key/path. Required if s3_path not provided.
+            
+        Returns
+        -------
+        str
+            S3 path where the data was saved
+            
+        Raises
+        ------
+        ValueError
+            If neither s3_path nor bucket+key are provided
+        """
+        if not s3_path and not (bucket and key):
+            raise ValueError("Either s3_path or both bucket and key must be provided")
+        
+        if s3_path:
+            full_path = s3_path
+        else:
+            full_path = f"s3://{bucket}/{key}"
+        
+        df = self.get_metrics_as_dataframe(email, date)
+        
+        try:
+            # Save directly to S3 using awswrangler
+            wr.s3.to_parquet(
+                df=df,
+                path=full_path,
+                index=False
+            )
+            return full_path
+            
+        except Exception as e:
+            raise ValueError(f"Failed to save to S3: {e}")
     
     def save_metrics_parquet(self, email: str, date: Optional[str] = None, filename: Optional[str] = None) -> str:
         """
@@ -322,3 +406,28 @@ def get_participant_metrics_parquet(email: str, date: Optional[str] = None, envi
     if environment == 'development':
         email = DEVELOPMENT_EMAIL
     return client.get_metrics_as_parquet(email, date)
+
+
+def get_participant_metrics_dataframe(email: str, date: Optional[str] = None, environment: str = 'development') -> pd.DataFrame:
+    """
+    Convenience function to get metrics data as pandas DataFrame.
+    
+    Parameters
+    ----------
+    email : str
+        Participant email address
+    date : str, optional
+        Date in various formats (ISO8601, DD/MM/YYYY, etc.).
+        Defaults to today's date if not provided.
+    environment : str
+        Environment to use ('development' or 'production')
+        
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame containing the metrics data
+    """
+    client = UltrahumanAPI(environment=environment)
+    if environment == 'development':
+        email = DEVELOPMENT_EMAIL
+    return client.get_metrics_as_dataframe(email, date)

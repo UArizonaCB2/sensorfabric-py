@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
 import logging
 import traceback
+import awswrangler as wr
 
 from sensorfabric.needle import Needle
 from sensorfabric.uh import UltrahumanAPI
@@ -93,35 +94,51 @@ class UltrahumanDataUploader:
         date_str = self.target_date.strftime('%Y-%m-%d')
         
         try:
-            # Get parquet data for this participant and date
-            parquet_data = self.uh_api.get_metrics_as_parquet(email, date_str)
+            # Get DataFrame for this participant and date
+            df = self.uh_api.get_metrics_as_dataframe(email, date_str)
             
-            # Create S3 key with organized folder structure
-            s3_key = f"ultrahuman-data/participants/{participant_id}/{self.target_date.strftime('%Y/%m/%d')}.parquet"
-            
-            # Upload to S3
-            self.s3_client.put_object(
-                Bucket=self.data_bucket,
-                Key=s3_key,
-                Body=parquet_data,
-                ContentType='application/octet-stream',
-                Metadata={
+            if df.empty:
+                logger.warning(f"No data available for participant {participant_id} on {date_str}")
+                return {
                     'participant_id': participant_id,
-                    'participant_email': email,
-                    'data_date': date_str,
-                    'data_type': 'ultrahuman_metrics',
-                    'upload_timestamp': datetime.utcnow().isoformat(),
-                    'data_size_bytes': str(len(parquet_data))
+                    'success': False,
+                    'error': 'No data available for this date'
+                }
+            
+            # Create S3 path with organized folder structure
+            s3_path = f"s3://{self.data_bucket}/ultrahuman-data/participants/{participant_id}/{self.target_date.strftime('%Y/%m/%d')}.parquet"
+            
+            # Add additional metadata columns
+            df['participant_id'] = participant_id
+            df['upload_timestamp'] = datetime.utcnow().isoformat()
+            df['data_type'] = 'ultrahuman_metrics'
+            
+            # Upload to S3 using awswrangler with metadata
+            wr.s3.to_parquet(
+                df=df,
+                path=s3_path,
+                index=False,
+                dataset=False,
+                s3_additional_kwargs={
+                    'Metadata': {
+                        'participant_id': participant_id,
+                        'participant_email': email,
+                        'data_date': date_str,
+                        'data_type': 'ultrahuman_metrics',
+                        'upload_timestamp': datetime.utcnow().isoformat(),
+                        'record_count': str(len(df))
+                    }
                 }
             )
             
-            logger.info(f"Successfully uploaded data for participant {participant_id}: {s3_key}")
+            logger.info(f"Successfully uploaded data for participant {participant_id}: {s3_path}")
             
             return {
                 'participant_id': participant_id,
                 'success': True,
-                's3_key': s3_key,
-                'data_size': len(parquet_data)
+                's3_path': s3_path,
+                'record_count': len(df),
+                'columns': list(df.columns)
             }
             
         except Exception as e:

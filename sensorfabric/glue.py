@@ -5,6 +5,8 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
 import logging
 import traceback
+import awswrangler as wr
+import pandas as pd
 
 from sensorfabric.needle import Needle
 from sensorfabric.templates import generate_weekly_report_template
@@ -93,38 +95,51 @@ class SensorFabricGlue:
             try:
                 # Load data for each day of the week
                 daily_data = []
+                weekly_dataframes = []
                 current_date = self.week_start
                 
                 while current_date <= self.week_end:
                     date_str = current_date.strftime('%Y-%m-%d')
                     
                     try:
-                        # Create S3 key for this participant and date
-                        s3_key = f"ultrahuman-data/participants/{participant_id}/{current_date.strftime('%Y/%m/%d')}.parquet"
+                        # Create S3 path for this participant and date
+                        s3_path = f"s3://{self.data_bucket}/ultrahuman-data/participants/{participant_id}/{current_date.strftime('%Y/%m/%d')}.parquet"
                         
-                        # Check if data exists in S3
-                        response = self.s3_client.head_object(Bucket=self.data_bucket, Key=s3_key)
-                        data_size = response['ContentLength']
+                        # Try to read the parquet file using awswrangler
+                        df = wr.s3.read_parquet(
+                            path=s3_path,
+                            use_threads=True
+                        )
                         
-                        daily_data.append({
-                            'date': date_str,
-                            'data_size': data_size,
-                            's3_key': s3_key,
-                            'last_modified': response.get('LastModified')
-                        })
-                        logger.info(f"Found data for {participant_id} on {date_str}: {s3_key}")
+                        if not df.empty:
+                            weekly_dataframes.append(df)
+                            daily_data.append({
+                                'date': date_str,
+                                'record_count': len(df),
+                                's3_path': s3_path,
+                                'columns': list(df.columns),
+                                'dataframe': df
+                            })
+                            logger.info(f"Loaded {len(df)} records for {participant_id} on {date_str}")
+                        else:
+                            logger.warning(f"Empty data for {participant_id} on {date_str}")
                         
-                    except self.s3_client.exceptions.NoSuchKey:
+                    except wr.exceptions.NoFilesFound:
                         logger.warning(f"No data found for {participant_id} on {date_str}")
                     except Exception as day_error:
-                        logger.warning(f"Failed to check data for {participant_id} on {date_str}: {str(day_error)}")
+                        logger.warning(f"Failed to load data for {participant_id} on {date_str}: {str(day_error)}")
                     
                     current_date += timedelta(days=1)
                 
-                if daily_data:
+                if daily_data and weekly_dataframes:
+                    # Combine all daily dataframes into a weekly dataframe
+                    weekly_df = pd.concat(weekly_dataframes, ignore_index=True)
+                    
                     participant_data[participant_id] = {
                         'participant': participant,
-                        'daily_data': daily_data
+                        'daily_data': daily_data,
+                        'weekly_dataframe': weekly_df,
+                        'total_records': len(weekly_df)
                     }
                 
             except Exception as e:
@@ -164,8 +179,8 @@ class SensorFabricGlue:
             try:
                 participant = data['participant']
                 
-                # Aggregate weekly sensor data (simplified for demo)
-                weekly_sensor_data = self._aggregate_weekly_data(data['daily_data'])
+                # Aggregate weekly sensor data
+                weekly_sensor_data = self._aggregate_weekly_data(data)
                 
                 # Calculate report parameters
                 weeks_enrolled = self._calculate_weeks_enrolled(participant)
@@ -195,12 +210,87 @@ class SensorFabricGlue:
         
         return reports
     
-    def _aggregate_weekly_data(self, daily_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Aggregate daily sensor data into weekly format expected by templates."""
-        # This is a simplified aggregation - in practice you'd parse the parquet data
-        # and properly aggregate metrics like heart rate, steps, sleep, etc.
+    def _aggregate_weekly_data(self, participant_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Aggregate weekly sensor data into format expected by templates."""
+        weekly_df = participant_data.get('weekly_dataframe')
         
-        aggregated_data = [
+        if weekly_df is None or weekly_df.empty:
+            logger.warning("No weekly dataframe available for aggregation")
+            return self._get_default_aggregated_data()
+        
+        try:
+            aggregated_data = []
+            
+            # Process heart rate data if available
+            if 'heart_rate' in weekly_df.columns or 'hr' in weekly_df.columns:
+                hr_col = 'heart_rate' if 'heart_rate' in weekly_df.columns else 'hr'
+                hr_data = weekly_df[hr_col].dropna()
+                
+                if not hr_data.empty:
+                    aggregated_data.append({
+                        "type": "hr",
+                        "object": {
+                            "day_start_timestamp": int(self.week_start.timestamp()),
+                            "title": "Heart Rate",
+                            "values": hr_data.tolist(),
+                            "last_reading": float(hr_data.iloc[-1]),
+                            "avg": float(hr_data.mean()),
+                            "min": float(hr_data.min()),
+                            "max": float(hr_data.max()),
+                            "unit": "BPM"
+                        }
+                    })
+            
+            # Process steps data if available
+            if 'steps' in weekly_df.columns or 'step_count' in weekly_df.columns:
+                steps_col = 'steps' if 'steps' in weekly_df.columns else 'step_count'
+                steps_data = weekly_df[steps_col].dropna()
+                
+                if not steps_data.empty:
+                    weekly_avg = float(steps_data.mean())
+                    aggregated_data.append({
+                        "type": "steps",
+                        "object": {
+                            "day_start_timestamp": int(self.week_start.timestamp()),
+                            "values": steps_data.tolist(),
+                            "subtitle": "Weekly Average",
+                            "avg": weekly_avg,
+                            "total": float(steps_data.sum()),
+                            "trend_title": f"Avg: {int(weekly_avg)}",
+                            "trend_direction": "positive" if weekly_avg > 7000 else "neutral"
+                        }
+                    })
+            
+            # Process sleep data if available
+            if 'sleep_duration' in weekly_df.columns or 'sleep' in weekly_df.columns:
+                sleep_col = 'sleep_duration' if 'sleep_duration' in weekly_df.columns else 'sleep'
+                sleep_data = weekly_df[sleep_col].dropna()
+                
+                if not sleep_data.empty:
+                    aggregated_data.append({
+                        "type": "sleep",
+                        "object": {
+                            "day_start_timestamp": int(self.week_start.timestamp()),
+                            "title": "Sleep Duration",
+                            "values": sleep_data.tolist(),
+                            "avg_hours": float(sleep_data.mean()),
+                            "unit": "hours"
+                        }
+                    })
+            
+            # If no specific metrics found, return default data
+            if not aggregated_data:
+                return self._get_default_aggregated_data()
+            
+            return aggregated_data
+            
+        except Exception as e:
+            logger.error(f"Failed to aggregate weekly data: {str(e)}")
+            return self._get_default_aggregated_data()
+    
+    def _get_default_aggregated_data(self) -> List[Dict[str, Any]]:
+        """Return default aggregated data structure when no real data is available."""
+        return [
             {
                 "type": "hr",
                 "object": {
@@ -223,8 +313,6 @@ class SensorFabricGlue:
                 }
             }
         ]
-        
-        return aggregated_data
     
     def _calculate_weeks_enrolled(self, participant: Dict[str, Any]) -> int:
         """Calculate how many weeks participant has been enrolled."""
@@ -308,11 +396,11 @@ class SensorFabricGlue:
                     'reports_generated': 0
                 }
             
-            # Collect Ultrahuman data
-            participant_data = self._collect_ultrahuman_data(participants)
+            # Load Ultrahuman data from S3
+            participant_data = self._load_ultrahuman_data_from_s3(participants)
             
-            # Upload raw data to S3
-            self._upload_raw_data_to_s3(participant_data)
+            # Validate data availability
+            participant_data = self._validate_data_availability(participant_data)
             
             # Generate weekly reports
             reports = self._generate_weekly_reports(participant_data)
