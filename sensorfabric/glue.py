@@ -7,7 +7,6 @@ import logging
 import traceback
 
 from sensorfabric.needle import Needle
-from sensorfabric.uh import UltrahumanAPI, get_participant_metrics_parquet
 from sensorfabric.templates import generate_weekly_report_template
 
 # Configure logging
@@ -20,16 +19,14 @@ class SensorFabricGlue:
     
     This class coordinates:
     1. Fetching participant data from MDH
-    2. Collecting Ultrahuman sensor data for participants
-    3. Storing raw data in S3
-    4. Generating weekly reports
-    5. Uploading reports to S3
+    2. Loading Ultrahuman sensor data from S3 (collected by uh_upload.py)
+    3. Generating weekly reports from stored data
+    4. Uploading reports to S3
     """
     
     def __init__(self):
         self.s3_client = boto3.client('s3')
         self.needle = None
-        self.uh_api = None
         
         # S3 configuration from environment variables
         self.data_bucket = os.environ.get('SF_DATA_BUCKET')
@@ -49,11 +46,6 @@ class SensorFabricGlue:
             # Initialize MDH connection via Needle
             self.needle = Needle(method='mdh')
             logger.info("MDH connection initialized successfully")
-            
-            # Initialize Ultrahuman API
-            uh_environment = os.environ.get('UH_ENVIRONMENT', 'development')
-            self.uh_api = UltrahumanAPI(environment=uh_environment)
-            logger.info(f"Ultrahuman API initialized for {uh_environment} environment")
             
         except Exception as e:
             logger.error(f"Failed to initialize connections: {str(e)}")
@@ -91,20 +83,15 @@ class SensorFabricGlue:
             logger.error(f"Failed to fetch participants: {str(e)}")
             raise
     
-    def _collect_ultrahuman_data(self, participants: List[Dict[str, Any]]) -> Dict[str, bytes]:
-        """Collect Ultrahuman data for all participants for the week."""
+    def _load_ultrahuman_data_from_s3(self, participants: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Load Ultrahuman data for all participants for the week from S3."""
         participant_data = {}
         
         for participant in participants:
             participant_id = participant.get('identifier')
-            email = participant.get('customFields', {}).get('email')
-            
-            if not email:
-                logger.warning(f"No email found for participant {participant_id}")
-                continue
             
             try:
-                # Collect data for each day of the week
+                # Load data for each day of the week
                 daily_data = []
                 current_date = self.week_start
                 
@@ -112,17 +99,25 @@ class SensorFabricGlue:
                     date_str = current_date.strftime('%Y-%m-%d')
                     
                     try:
-                        # Get parquet data for this day
-                        parquet_data = self.uh_api.get_metrics_as_parquet(email, date_str)
+                        # Create S3 key for this participant and date
+                        s3_key = f"ultrahuman-data/participants/{participant_id}/{current_date.strftime('%Y/%m/%d')}.parquet"
+                        
+                        # Check if data exists in S3
+                        response = self.s3_client.head_object(Bucket=self.data_bucket, Key=s3_key)
+                        data_size = response['ContentLength']
+                        
                         daily_data.append({
                             'date': date_str,
-                            'data_size': len(parquet_data),
-                            'parquet_data': parquet_data
+                            'data_size': data_size,
+                            's3_key': s3_key,
+                            'last_modified': response.get('LastModified')
                         })
-                        logger.info(f"Collected data for {participant_id} on {date_str}")
+                        logger.info(f"Found data for {participant_id} on {date_str}: {s3_key}")
                         
+                    except self.s3_client.exceptions.NoSuchKey:
+                        logger.warning(f"No data found for {participant_id} on {date_str}")
                     except Exception as day_error:
-                        logger.warning(f"Failed to collect data for {participant_id} on {date_str}: {str(day_error)}")
+                        logger.warning(f"Failed to check data for {participant_id} on {date_str}: {str(day_error)}")
                     
                     current_date += timedelta(days=1)
                 
@@ -133,40 +128,33 @@ class SensorFabricGlue:
                     }
                 
             except Exception as e:
-                logger.error(f"Failed to collect data for participant {participant_id}: {str(e)}")
+                logger.error(f"Failed to load data for participant {participant_id}: {str(e)}")
                 continue
         
         return participant_data
     
-    def _upload_raw_data_to_s3(self, participant_data: Dict[str, Any]):
-        """Upload raw sensor data to S3."""
-        week_prefix = f"ultrahuman-data/{self.week_start.strftime('%Y/%m/%d')}"
+    def _validate_data_availability(self, participant_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Validate that required data is available in S3 for report generation."""
+        validated_data = {}
         
         for participant_id, data in participant_data.items():
-            for daily_data in data['daily_data']:
-                date_str = daily_data['date']
-                parquet_data = daily_data['parquet_data']
+            if data['daily_data']:
+                # Count how many days have data
+                days_with_data = len(data['daily_data'])
+                total_days = (self.week_end - self.week_start).days + 1
                 
-                # Create S3 key
-                s3_key = f"{week_prefix}/{participant_id}/{date_str}.parquet"
+                logger.info(f"Participant {participant_id}: {days_with_data}/{total_days} days with data")
                 
-                try:
-                    self.s3_client.put_object(
-                        Bucket=self.data_bucket,
-                        Key=s3_key,
-                        Body=parquet_data,
-                        ContentType='application/octet-stream',
-                        Metadata={
-                            'participant_id': participant_id,
-                            'data_date': date_str,
-                            'data_type': 'ultrahuman_metrics',
-                            'processed_timestamp': datetime.utcnow().isoformat()
-                        }
-                    )
-                    logger.info(f"Uploaded raw data: {s3_key}")
-                    
-                except Exception as e:
-                    logger.error(f"Failed to upload {s3_key}: {str(e)}")
+                # Include participants with at least some data
+                if days_with_data > 0:
+                    validated_data[participant_id] = data
+                    validated_data[participant_id]['data_completeness'] = days_with_data / total_days
+                else:
+                    logger.warning(f"No data available for participant {participant_id} for the week")
+            else:
+                logger.warning(f"No daily data found for participant {participant_id}")
+        
+        return validated_data
     
     def _generate_weekly_reports(self, participant_data: Dict[str, Any]) -> Dict[str, str]:
         """Generate weekly reports for all participants."""
@@ -368,9 +356,6 @@ def lambda_handler(event, context):
     - MDH_ACC_NAME: MyDataHelps account name
     - MDH_PROJ_NAME: MyDataHelps project name
     - MDH_PROJ_ID: MyDataHelps project ID
-    - UH_ENVIRONMENT: Ultrahuman environment ('development' or 'production')
-    - UH_PROD_API_KEY: Ultrahuman production API key (if using production)
-    - UH_PROD_BASE_URL: Ultrahuman production base URL (if using production)
     """
     
     logger.info(f"Lambda function started with event: {json.dumps(event)}")
