@@ -15,6 +15,7 @@ Just a set of utility files to help out.
 import configparser
 import pathlib
 from datetime import datetime, timedelta
+from typing import Dict, List, Any, Union
 
 def appendAWSCredentials(profilename : str,
                          aws_credentials,
@@ -122,3 +123,98 @@ def readAWSCredentials(profilename : str,
             return dict(profile)
 
     return None
+
+
+def flatten_json_to_columns(json_data: Dict[str, Any], fill: bool = False, separator: str = "_") -> Dict[str, List[Any]]:
+    """
+    Flatten a JSON structure from row-oriented to column-oriented format.
+    
+    This function takes a JSON object and converts it to a columnar format where:
+    - Scalar values become single-element lists (or repeated if fill=True)
+    - Arrays become columns with their values
+    - Nested objects get flattened with separator-joined keys
+    
+    Parameters
+    ----------
+    json_data : dict
+        The input JSON object to flatten
+    fill : bool, default False
+        If True, scalar values are repeated to match the length of the longest array
+        If False, scalar values become single-element lists
+    separator : str, default "_"
+        Separator used to join nested object keys
+        
+    Returns
+    -------
+    dict
+        Column-oriented dictionary where each key maps to a list of values
+        
+    Examples
+    --------
+    >>> input_data = {
+    ...     "device_name": "AppleWatch",
+    ...     "data_type": "hr", 
+    ...     "values": [{"timestamp": 1000.0, "value": 84}, {"timestamp": 1600.0, "value": 85}]
+    ... }
+    >>> flatten_json_to_columns(input_data, fill=False)
+    {'device_name': ['AppleWatch'], 'data_type': ['hr'], 'values_timestamp': [1000.0, 1600.0], 'values_value': [84, 85]}
+    
+    >>> flatten_json_to_columns(input_data, fill=True)  
+    {'device_name': ['AppleWatch', 'AppleWatch'], 'data_type': ['hr', 'hr'], 'values_timestamp': [1000.0, 1600.0], 'values_value': [84, 85]}
+    """
+    result = {}
+    
+    # First pass: flatten all values and identify the maximum length
+    max_length = 1
+    
+    def _flatten_recursive(obj: Any, prefix: str = "") -> Dict[str, List[Any]]:
+        """Recursively flatten nested structures."""
+        flattened = {}
+        
+        if isinstance(obj, dict):
+            for key, value in obj.items():
+                new_key = f"{prefix}{separator}{key}" if prefix else key
+                flattened.update(_flatten_recursive(value, new_key))
+        elif isinstance(obj, list):
+            if not obj:
+                # Empty list
+                flattened[prefix] = []
+            elif all(isinstance(item, dict) for item in obj):
+                # List of dictionaries - flatten each dict and combine
+                all_keys = set()
+                for item in obj:
+                    all_keys.update(item.keys())
+                
+                for key in all_keys:
+                    new_key = f"{prefix}{separator}{key}" if prefix else key
+                    values = []
+                    for item in obj:
+                        values.append(item.get(key))
+                    flattened[new_key] = values
+            else:
+                # List of scalars or mixed types
+                flattened[prefix] = obj
+        else:
+            # Scalar value
+            flattened[prefix] = [obj]
+            
+        return flattened
+    
+    # Flatten the JSON structure
+    flattened_data = _flatten_recursive(json_data)
+    
+    # Find the maximum length among all arrays
+    if fill:
+        for values in flattened_data.values():
+            if isinstance(values, list) and len(values) > max_length:
+                max_length = len(values)
+    
+    # Second pass: apply fill logic if needed
+    for key, values in flattened_data.items():
+        if fill and isinstance(values, list) and len(values) == 1 and max_length > 1:
+            # Replicate single values to match max_length
+            result[key] = values * max_length
+        else:
+            result[key] = values
+    
+    return result
