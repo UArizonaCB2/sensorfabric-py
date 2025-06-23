@@ -274,7 +274,7 @@ def convert_dict_timestamps(data: Union[Dict[str, Any], List[Any]], timezone: Op
         """Convert Unix timestamp to ISO8601 format."""
         try:
             # Convert to UTC datetime
-            dt_utc = datetime.fromtimestamp(unix_timestamp, tz=timezone.utc)
+            dt_utc = datetime.fromtimestamp(unix_timestamp)
             
             if target_timezone:
                 # Convert to specified timezone
