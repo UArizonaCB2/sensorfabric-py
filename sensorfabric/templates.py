@@ -1,9 +1,10 @@
 from jinja2 import Template
-from datetime import datetime
+from datetime import datetifme
 from typing import Dict, List, Any, Optional
 import json
 import jsonschema
 import os
+from sensorfabric.utils import validate_sensor_data_schema
 
 
 def generate_weekly_report_template(
@@ -38,7 +39,8 @@ def generate_weekly_report_template(
     """
     
     # Validate the JSON data against the schema
-    _validate_sensor_data_schema(json_data)
+    # TODO this actually needs to be the resultened schema from SQL query.
+    validate_sensor_data_schema(json_data)
     
     # Process the JSON data to extract metrics
     metrics = _process_sensor_data(json_data, last_week_data)
@@ -142,34 +144,6 @@ def generate_weekly_report_template(
         metrics=metrics,
         report_date=datetime.now().strftime("%Y-%m-%d %H:%M")
     )
-
-
-def _validate_sensor_data_schema(json_data: List[Dict[str, Any]]) -> None:
-    """
-    Validate the sensor data against the JSON schema.
-    
-    Args:
-        json_data: The sensor data to validate
-        
-    Raises:
-        jsonschema.ValidationError: If validation fails
-        FileNotFoundError: If schema file is not found
-    """
-    # Get the schema file path relative to this module
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    schema_path = os.path.join(current_dir, 'schemas', 'sensor_data_schema.json')
-    
-    try:
-        with open(schema_path, 'r') as schema_file:
-            schema = json.load(schema_file)
-    except FileNotFoundError:
-        raise FileNotFoundError(f"Schema file not found at: {schema_path}")
-    
-    # Validate the data against the schema
-    try:
-        jsonschema.validate(json_data, schema)
-    except jsonschema.ValidationError as e:
-        raise jsonschema.ValidationError(f"Sensor data validation failed: {e.message}")
 
 
 def _process_sensor_data(json_data: List[Dict[str, Any]], last_week_data: Optional[Dict] = None) -> Dict[str, Any]:

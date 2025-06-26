@@ -17,6 +17,10 @@ import pathlib
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Any, Union, Optional
 import pytz
+import jsonschema
+import json
+import os
+
 
 def appendAWSCredentials(profilename : str,
                          aws_credentials,
@@ -349,3 +353,31 @@ def convert_dict_timestamps(data: Union[Dict[str, Any], List[Any]], timezone: Op
         return _process_list(data)
     else:
         return data
+
+
+def validate_sensor_data_schema(json_data: List[Dict[str, Any]]) -> None:
+    """
+    Validate the sensor data against the JSON schema.
+    
+    Args:
+        json_data: The sensor data to validate
+        
+    Raises:
+        jsonschema.ValidationError: If validation fails
+        FileNotFoundError: If schema file is not found
+    """
+    # Get the schema file path relative to this module
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    schema_path = os.path.join(current_dir, 'schemas', 'sensor_data_schema_flattened.json')
+    
+    try:
+        with open(schema_path, 'r') as schema_file:
+            schema = json.load(schema_file)
+    except FileNotFoundError:
+        raise FileNotFoundError(f"Schema file not found at: {schema_path}")
+    
+    # Validate the data against the schema
+    try:
+        jsonschema.validate(json_data, schema)
+    except jsonschema.ValidationError as e:
+        raise jsonschema.ValidationError(f"Sensor data validation failed: {e.message}")

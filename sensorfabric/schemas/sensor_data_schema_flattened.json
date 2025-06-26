@@ -1,0 +1,271 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "$id": "https://example.com/sensor-data-schema-flattened.json",
+  "title": "Flattened Sensor Data Schema",
+  "description": "Schema for flattened UltraHuman sensor data using flatten_json_to_columns utility",
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "hr",
+          "temp",
+          "hrv",
+          "steps",
+          "motion",
+          "night_rhr"
+        ]
+      },
+      "description": "The type of sensor data"
+    },
+    "object_total": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "description": "Total value"
+    },
+    "object_day_start_timestamp": {
+      "type": "array",
+      "items": {
+        "type": "integer"
+      },
+      "description": "Unix timestamp for the start of the day"
+    },
+    "object_title": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Human readable title for the sensor data"
+    },
+    "object_values_value": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "description": "Measured value from flattened values array"
+    },
+    "object_values_timestamp": {
+      "type": "array",
+      "items": {
+        "type": "integer"
+      },
+      "description": "Unix timestamp when measurement was taken from flattened values array"
+    },
+    "object_last_reading": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "description": "The most recent sensor reading"
+    },
+    "object_unit": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Unit of measurement (e.g., BPM, °C)"
+    },
+    "object_subtitle": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Subtitle for the data (e.g., Average)"
+    },
+    "object_avg": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "description": "Average value"
+    },
+    "object_trend_title": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Trend indicator (e.g., +5, -14)"
+    },
+    "object_trend_direction": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "positive",
+          "negative",
+          "neutral"
+        ]
+      },
+      "description": "Direction of the trend"
+    },
+    "object_sleep_graph_title": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Title for sleep graph"
+    },
+    "object_sleep_graph_data_start": {
+      "type": "array",
+      "items": {
+        "type": "integer"
+      },
+      "description": "Start timestamp for sleep stage from flattened sleep_graph.data array"
+    },
+    "object_sleep_graph_data_end": {
+      "type": "array",
+      "items": {
+        "type": "integer"
+      },
+      "description": "End timestamp for sleep stage from flattened sleep_graph.data array"
+    },
+    "object_sleep_graph_data_type": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "awake",
+          "light_sleep",
+          "deep_sleep",
+          "rem_sleep"
+        ]
+      },
+      "description": "Type of sleep stage from flattened sleep_graph.data array"
+    },
+    "object_hr_graph_title": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Title for heart rate graph"
+    },
+    "object_hr_graph_data_timestamp": {
+      "type": "array",
+      "items": {
+        "type": "integer"
+      },
+      "description": "Timestamp for HR measurement from flattened hr_graph.data array"
+    },
+    "object_hr_graph_data_value": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "description": "Heart rate value from flattened hr_graph.data array"
+    },
+    "object_hrv_graph_title": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Title for HRV graph"
+    },
+    "object_hrv_graph_data_timestamp": {
+      "type": "array",
+      "items": {
+        "type": "integer"
+      },
+      "description": "Timestamp for HRV measurement from flattened hrv_graph.data array"
+    },
+    "object_hrv_graph_data_value": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "description": "HRV value from flattened hrv_graph.data array"
+    },
+    "object_summary_title": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Title of the summary metric from flattened summary array"
+    },
+    "object_summary_state": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "optimal",
+          "good",
+          "warning",
+          "poor"
+        ]
+      },
+      "description": "State of the metric from flattened summary array"
+    },
+    "object_summary_state_title": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Human readable state description from flattened summary array"
+    },
+    "object_summary_score": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "description": "Numeric score for the metric from flattened summary array"
+    },
+    "object_summary_education_modal_deeplink": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uri"
+      },
+      "description": "Deep link to educational content from flattened summary array"
+    },
+    "object_day_start_timestamp_iso8601": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Day start timestamp in ISO 8601 format"
+    },
+    "object_day_start_timestamp_iso8601_tz": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Day start timestamp in ISO 8601 format with timezone"
+    },
+    "object_day_end_timestamp_iso8601": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Day end timestamp in ISO 8601 format"
+    },
+    "object_day_end_timestamp_iso8601_tz": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Day end timestamp in ISO 8601 format with timezone"
+    },
+    "object_values_timestamp_iso8601": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Timestamp for measurement in ISO 8601 format"
+    },
+    "object_values_timestamp_iso8601_tz": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Timestamp for measurement in ISO 8601 format with timezone"
+    }
+  },
+  "required": [
+    "type",
+    "object_values_timestamp"
+  ],
+  "additionalProperties": false
+}

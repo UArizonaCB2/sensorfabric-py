@@ -9,6 +9,7 @@ import awswrangler as wr
 
 
 DEVELOPMENT_EMAIL = "shresth@ultrahuman.com"
+DEFAULT_PROD_BASE_URL = "https://partner.ultrahuman.com/api/v1/metrics"
 
 
 class UltrahumanAPI:
@@ -84,8 +85,8 @@ class UltrahumanAPI:
             'api_key': 'eyJhbGciOiJIUzI1NiJ9.eyJzZWNyZXQiOiJjZGM5MjdkYjQ3ZjA5ZDhhNzQxYiIsImV4cCI6MjQzMDEzNTM5Nn0.x3SqFIubvafBxZ1GxvPRqHCd0CLa4_jip8LHbopzLsQ'
         },
         'production': {
-            'base_url': os.getenv("UH_PROD_BASE_URL", None),  # Must be set via environment variable
-            'api_key': os.getenv("UH_PROD_API_KEY", None)    # Must be set via environment variable
+            'base_url': os.getenv("UH_PROD_BASE_URL", DEFAULT_PROD_BASE_URL),
+            'api_key': os.getenv("UH_PROD_API_KEY", None) # Must be set via environment variable
         }
     }
     
@@ -117,8 +118,8 @@ class UltrahumanAPI:
             self.api_key = os.getenv('UH_DEV_API_KEY', config['api_key'])
         else:
             # For production, require env vars
-            self.base_url = os.getenv('UH_PROD_BASE_URL')
-            self.api_key = os.getenv('UH_PROD_API_KEY')
+            self.base_url = os.getenv('UH_PROD_BASE_URL', DEFAULT_PROD_BASE_URL)
+            self.api_key = os.getenv('UH_PROD_API_KEY', None)
             
             if not self.base_url:
                 raise ValueError("UH_PROD_BASE_URL environment variable must be set for production")
@@ -236,41 +237,6 @@ class UltrahumanAPI:
             
         except Exception as e:
             raise ValueError(f"Failed to convert response to DataFrame: {e}")
-
-    def get_metrics_as_parquet(self, email: str, date: Optional[str] = None) -> bytes:
-        """
-        Fetch metrics data and return as parquet file bytes.
-        
-        Parameters
-        ----------
-        email : str
-            Participant email address
-        date : str, optional
-            Date in various formats (ISO8601, DD/MM/YYYY, etc.).
-            Defaults to today's date if not provided.
-            
-        Returns
-        -------
-        bytes
-            Parquet file content as bytes
-            
-        Raises
-        ------
-        requests.RequestException
-            If the API request fails
-        ValueError
-            If the response cannot be converted to DataFrame or date is invalid
-        """
-        df = self.get_metrics_as_dataframe(email, date)
-        
-        try:
-            # Convert to parquet bytes using awswrangler
-            buffer = io.BytesIO()
-            df.to_parquet(buffer, index=False)
-            return buffer.getvalue()
-            
-        except Exception as e:
-            raise ValueError(f"Failed to convert DataFrame to parquet: {e}")
 
     def save_metrics_to_s3(self, email: str, date: Optional[str] = None, 
                           s3_path: str = None, bucket: str = None, key: str = None) -> str:

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://example.com/sensor-data-schema.json",
   "title": "Sensor Data Schema",
-  "description": "Schema for sensor fabric data containing various sensor types and their measurements",
+  "description": "Schema for UltraHuman sensor data containing various sensor types and their measurements",
   "type": "array",
   "items": {
     "type": "object",
