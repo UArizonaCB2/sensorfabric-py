@@ -131,6 +131,80 @@ class MDH:
         queryParam : dict, optional
             Additional query parameters for the API request
             
+
+        Participant Object Structure:
+        {
+            "accountEmail": "email_address@domain.com",
+            "accountMobilePhone": null,
+            "customFields": {
+                "Coments": "",
+                "Contacted": "",
+                "DeclinedReason": "",
+                "DeliverySite": "",
+                "PrenatalCareSite": "",
+                "RecruitmentDate": "",
+                "WithdrawalDate": "",
+                "compensation_choice": "",
+                "compensation_initials": "",
+                "conception_date": "",
+                "cuffSize": "",
+                "daily_symptom_count": "",
+                "delivery_date": "",
+                "ema_enabled": "",
+                "ema_evening_close": "",
+                "ema_evening_completed": "",
+                "ema_evening_time": "",
+                "ema_metadata1": "",
+                "ema_metadata2": "",
+                "ema_metadata3": "",
+                "ema_metadata4": "",
+                "ema_morning_close": "",
+                "ema_morning_completed": "",
+                "ema_morning_time": "",
+                "ema_random1": "",
+                "ema_random2": "",
+                "ema_random3": "",
+                "ema_random4": "",
+                "ema_reminder_time": "",
+                "ema_status": "",
+                "future_use_initials": "",
+                "ga_20_sent": "",
+                "ga_28_sent": "",
+                "ga_36_sent": "",
+                "icf_version_date": "",
+                "interview_initials": "",
+                "oura": "",
+                "postpartum_sent": "",
+                "pregnancy_proof": "",
+                "sgAvatar": "",
+                "total_symptom_count": "",
+                "uh_email": "",
+                "ultrahuman": "",
+                "weekly_survey_active": "",
+                "weekly_symptom_count": ""
+            },
+            "demographics": {
+                "email": "email_address@domain.com",
+                "firstName": "First Name",
+                "lastName": "Last Name",
+                "timeZone": "America/Phoenix",
+                "unsubscribedFromEmails": "false",
+                "unsubscribedFromSms": "false",
+                "utcOffset": "-07:00:00"
+            },
+            "enrolled": true,
+            "enrollmentDate": "2025-06-24T17:51:07.651+00:00",
+            "excludeFromExport": false,
+            "id": "uuid4",
+            "insertedDate": "2025-06-24T17:50:20.25+00:00",
+            "institutionCode": "",
+            "invitationStatus": null,
+            "linkIdentifier": "uuid4",
+            "participantIdentifier": "AA-0000-0000",
+            "viewParticipantRecordLink": null,
+            "withdrawDate": null
+        }
+
         Returns
         -------
         dict
