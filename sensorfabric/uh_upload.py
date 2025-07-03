@@ -24,12 +24,13 @@ DEFAULT_PROJECT_NAME = 'uh-biobayb-dev'
 
 class UltrahumanDataUploader:
     """
-    AWS Lambda function for daily UltraHuman sensor data collection.
+    AWS Lambda function for SNS-driven UltraHuman sensor data collection.
     
     This class handles:
-    1. Fetching active participants from MDH
-    2. Collecting daily UltraHuman sensor data for each participant
+    1. Processing SNS messages containing participant data
+    2. Collecting UltraHuman sensor data for specified participants
     3. Uploading parquet data to S3 in organized folder structure
+    4. Updating participant sync dates in MDH via Needle
     """
     
     def __init__(self):
@@ -84,44 +85,68 @@ class UltrahumanDataUploader:
 
         logger.info(f"Collecting data for date: {self.target_date}")
 
-    def _get_active_participants(self) -> List[Dict[str, Any]]:
-        """Fetch active participants from MDH."""
+    def _process_sns_message(self, sns_message: Dict[str, Any]) -> Dict[str, Any]:
+        """Process SNS message to extract participant data.
+        
+        Args:
+            sns_message: SNS message containing participant data
+            
+        Returns:
+            Dict with participant data for UltraHuman collection
+            
+        Raises:
+            ValueError: If required fields are missing
+        """
         try:
-            participants_data = self.needle.mdh.getAllParticipants()
-            active_participants = []
+            # Parse the SNS message body
+            message_body = json.loads(sns_message.get('Message', '{}'))
             
-            for participant in participants_data.get('participants', []):
-                # Filter for active participants
-                if participant.get('enrolled'):
-                    active_participants.append(participant)
+            # Extract required fields
+            participant_id = message_body.get('participant_id')
+            email = message_body.get('email')
+            target_date = message_body.get('target_date')
             
-            logger.info(f"Found {len(active_participants)} active participants")
-            return active_participants
-
+            # Validate required fields
+            if not participant_id:
+                raise ValueError("Missing required field: participant_id")
+            if not email:
+                raise ValueError("Missing required field: email")
+            if not target_date:
+                raise ValueError("Missing required field: target_date")
+            
+            # Extract optional fields with defaults
+            timezone = message_body.get('timezone', 'America/Phoenix')
+            custom_fields = message_body.get('custom_fields', {})
+            
+            participant_data = {
+                'participantIdentifier': participant_id,
+                'email': email,
+                'target_date': target_date,
+                'timezone': timezone,
+                'customFields': custom_fields
+            }
+            
+            logger.info(f"Processed SNS message for participant {participant_id}")
+            return participant_data
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse SNS message JSON: {str(e)}")
+            raise ValueError(f"Invalid JSON in SNS message: {str(e)}")
         except Exception as e:
-            logger.error(f"Failed to fetch participants: {str(e)}")
+            logger.error(f"Failed to process SNS message: {str(e)}")
             raise
 
     def _collect_and_upload_participant_data(self, participant: Dict[str, Any]) -> Dict[str, Any]:
         self._check_create_database()
         """Collect and upload UltraHuman data for a single participant."""
         participant_id = participant.get('participantIdentifier')
-        customFields = participant.get('customFields', {})
-        demographics = participant.get('demographics', {})
-        demographicsEmail = demographics.get('email', None)
-        accountEmail = participant.get('accountEmail', None)
-        customEmail = customFields.get('uh_email', None)
-        email = None
-
-        if customEmail is not None and len(customEmail) > 0:
-            email = customEmail
-        elif demographicsEmail is not None and len(demographicsEmail) > 0:
-            email = demographicsEmail
-        elif accountEmail is not None and len(accountEmail) > 0:
-            email = accountEmail
-
-        # default to phoenix timezone if no tz set
-        timezone = customFields.get('timeZone', 'America/Phoenix')
+        
+        # For SNS-based processing, email and timezone come directly from message
+        email = participant.get('email')
+        timezone = participant.get('timezone', 'America/Phoenix')
+        
+        # Use target_date from SNS message if available, otherwise use instance target_date
+        target_date = participant.get('target_date', self.target_date)
         if not email:
             logger.warning(f"No email found for participant {participant_id}")
             return {'participant_id': participant_id, 'success': False, 'error': 'No email found'}
@@ -129,7 +154,7 @@ class UltrahumanDataUploader:
         record_count = 0
         try:
             # Get DataFrame for this participant and date
-            json_obj = self.uh_api.get_metrics(email, self.target_date)
+            json_obj = self.uh_api.get_metrics(email, target_date)
             # pull out UH keys -
             # response structure is {"data": {"metric_data": [{}]}
             data = json_obj.get('data', {})
@@ -175,7 +200,7 @@ class UltrahumanDataUploader:
                             'Metadata': {
                                 'participant_id': participant_id,
                                 'participant_email': email,
-                                'data_date': self.target_date,
+                                'data_date': target_date,
                                 'data_type': 'ultrahuman_metrics',
                                 'metric_type': metric_type,
                                 'upload_timestamp': datetime.datetime.now(datetime.timezone.utc).isoformat(),
@@ -187,6 +212,13 @@ class UltrahumanDataUploader:
                     record_count += len(df)
 
             logger.info(f"Successfully uploaded data for participant {participant_id}")
+            
+            # Update participant's sync date in MDH
+            try:
+                self._update_participant_sync_date(participant_id)
+            except Exception as e:
+                logger.warning(f"Failed to update sync date for participant {participant_id}: {str(e)}")
+                # Don't fail the entire operation if sync date update fails
 
             return {
                 'participant_id': participant_id,
@@ -202,57 +234,92 @@ class UltrahumanDataUploader:
                 'error': str(e)
             }
     
-    def collect_daily_data(self, target_date: Optional[str] = None) -> Dict[str, Any]:
-        """
-        Main orchestration method for collecting daily UltraHuman data.
+    def _update_participant_sync_date(self, participant_id: str) -> None:
+        """Update participant's uh_sync_date field in MDH.
         
         Args:
-            target_date: Optional date string (YYYY-MM-DD) to collect data for specific date
+            participant_id: The participant identifier to update
+            
+        Raises:
+            Exception: If update fails
+        """
+        try:
+            # Generate current ISO8601 timestamp
+            current_timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            
+            # Update participant's custom field
+            update_data = {
+                'customFields': {
+                    'uh_sync_date': current_timestamp
+                }
+            }
+            
+            # Use MDH API to update participant
+            self.needle.mdh.updateParticipant(participant_id, update_data)
+            
+            logger.info(f"Updated uh_sync_date for participant {participant_id} to {current_timestamp}")
+            
+        except Exception as e:
+            logger.error(f"Failed to update sync date for participant {participant_id}: {str(e)}")
+            raise
+    
+    def process_sns_messages(self, sns_records: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Process SNS messages containing participant data for UltraHuman collection.
+        
+        Args:
+            sns_records: List of SNS records from Lambda event
             
         Returns:
-            Dictionary with collection results and statistics
+            Dictionary with processing results and statistics
         """
         try:
             # Initialize connections
             self._initialize_connections()
             
-            # Set target date
-            self._set_target_date(target_date)
-            
-            # Get active participants
-            participants = self._get_active_participants()
-            
-            if not participants:
+            if not sns_records:
                 return {
                     'success': True,
-                    'message': 'No active participants found',
-                    'target_date': self.target_date,
+                    'message': 'No SNS records to process',
                     'participants_processed': 0,
                     'successful_uploads': 0,
                     'failed_uploads': 0
                 }
             
-            # Collect and upload data for each participant
+            # Process each SNS message
             results = []
             successful_uploads = 0
             failed_uploads = 0
             total_data_size = 0
             
-            for participant in participants:
-                result = self._collect_and_upload_participant_data(participant)
-                results.append(result)
-                
-                if result['success']:
-                    successful_uploads += 1
-                    total_data_size += result.get('record_count', 0)
-                else:
+            for record in sns_records:
+                try:
+                    # Extract participant data from SNS message
+                    participant_data = self._process_sns_message(record['Sns'])
+                    
+                    # Collect and upload data for this participant
+                    result = self._collect_and_upload_participant_data(participant_data)
+                    results.append(result)
+                    
+                    if result['success']:
+                        successful_uploads += 1
+                        total_data_size += result.get('record_count', 0)
+                    else:
+                        failed_uploads += 1
+                        
+                except Exception as e:
+                    logger.error(f"Failed to process SNS record: {str(e)}")
                     failed_uploads += 1
+                    results.append({
+                        'participant_id': 'unknown',
+                        'success': False,
+                        'error': f'SNS processing error: {str(e)}'
+                    })
             
             return {
                 'success': True,
-                'message': f'Daily data collection completed for {self.target_date}',
-                'target_date': self.target_date,
-                'participants_processed': len(participants),
+                'message': f'SNS message processing completed',
+                'participants_processed': len(sns_records),
                 'successful_uploads': successful_uploads,
                 'failed_uploads': failed_uploads,
                 'total_records_uploaded': total_data_size,
@@ -260,45 +327,109 @@ class UltrahumanDataUploader:
             }
             
         except Exception as e:
-            logger.error(f"Daily data collection failed: {str(e)}")
+            logger.error(f"SNS message processing failed: {str(e)}")
             logger.error(traceback.format_exc())
             return {
                 'success': False,
                 'error': str(e),
-                'message': 'Daily data collection failed'
+                'message': 'SNS message processing failed'
+            }
+    
+    def collect_daily_data(self, target_date: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Legacy method for collecting daily UltraHuman data (scheduled mode).
+        
+        Args:
+            target_date: Optional date string (YYYY-MM-DD) to collect data for specific date
+            
+        Returns:
+            Dictionary with collection results and statistics
+        """
+        logger.warning("collect_daily_data is deprecated. Use process_sns_messages for SNS-based processing.")
+        
+        try:
+            # Initialize connections
+            self._initialize_connections()
+            
+            # Set target date
+            self._set_target_date(target_date)
+            
+            return {
+                'success': False,
+                'message': 'Scheduled mode not supported. Use SNS-based processing.',
+                'target_date': self.target_date,
+                'participants_processed': 0,
+                'successful_uploads': 0,
+                'failed_uploads': 0
+            }
+            
+        except Exception as e:
+            logger.error(f"Legacy daily data collection failed: {str(e)}")
+            logger.error(traceback.format_exc())
+            return {
+                'success': False,
+                'error': str(e),
+                'message': 'Legacy daily data collection failed'
             }
 
 
 def lambda_handler(event, context):
     """
-    AWS Lambda entry point for UltraHuman data collection.
+    AWS Lambda entry point for UltraHuman data collection via SNS.
     
-    Expected event structure:
+    Expected event structure (SNS):
     {
-        "target_date": "2023-12-15"  # Optional: specific date to collect data for
+        "Records": [
+            {
+                "EventSource": "aws:sns",
+                "Sns": {
+                    "Message": "{\"participant_id\": \"123\", \"email\": \"user@example.com\", \"target_date\": \"2023-12-15\", \"timezone\": \"America/Phoenix\"}"
+                }
+            }
+        ]
     }
     
     Environment variables required:
     - SF_DATA_BUCKET: S3 bucket for data storage
-    - MDH_SECRET: MyDataHelps account secret
-    - MDH_ACC_NAME: MyDataHelps account name
-    - MDH_PROJ_NAME: MyDataHelps project name
-    - MDH_PROJ_ID: MyDataHelps project ID
+    - MDH_SECRET_KEY: MyDataHelps account secret
+    - MDH_ACCOUNT_NAME: MyDataHelps account name
+    - MDH_PROJECT_NAME: MyDataHelps project name
+    - MDH_PROJECT_ID: MyDataHelps project ID
     - UH_ENVIRONMENT: Ultrahuman environment ('development' or 'production')
     - UH_PROD_API_KEY: Ultrahuman production API key (if using production)
     - UH_PROD_BASE_URL: Ultrahuman production base URL (if using production)
     """
     
-    logger.info(f"UltraHuman data collection Lambda started with event: {json.dumps(event)}")
+    logger.info(f"UltraHuman SNS data collection Lambda started with event: {json.dumps(event)}")
     
     try:
         uploader = UltrahumanDataUploader()
         
-        # Extract target date from event if provided
-        target_date = event.get('target_date', None)
-        
-        # Collect the daily data
-        result = uploader.collect_daily_data(target_date)
+        # Check if this is an SNS event
+        if 'Records' in event:
+            # Process SNS records
+            sns_records = [record for record in event['Records'] if record.get('EventSource') == 'aws:sns']
+            
+            if sns_records:
+                result = uploader.process_sns_messages(sns_records)
+            else:
+                result = {
+                    'success': False,
+                    'message': 'No SNS records found in event',
+                    'participants_processed': 0,
+                    'successful_uploads': 0,
+                    'failed_uploads': 0
+                }
+        else:
+            # Legacy mode - log warning and return error
+            logger.warning("Received non-SNS event. This Lambda now requires SNS events.")
+            result = {
+                'success': False,
+                'message': 'This Lambda now requires SNS events. Legacy scheduled mode is deprecated.',
+                'participants_processed': 0,
+                'successful_uploads': 0,
+                'failed_uploads': 0
+            }
         
         # Prepare Lambda response
         response = {
@@ -309,11 +440,11 @@ def lambda_handler(event, context):
             }
         }
         
-        logger.info(f"UltraHuman data collection completed: {json.dumps(result)}")
+        logger.info(f"UltraHuman SNS data collection completed: {json.dumps(result)}")
         return response
         
     except Exception as e:
-        error_message = f"UltraHuman data collection Lambda failed: {str(e)}"
+        error_message = f"UltraHuman SNS data collection Lambda failed: {str(e)}"
         logger.error(error_message)
         logger.error(traceback.format_exc())
         
@@ -322,7 +453,7 @@ def lambda_handler(event, context):
             'body': json.dumps({
                 'success': False,
                 'error': str(e),
-                'message': 'UltraHuman data collection Lambda execution failed'
+                'message': 'UltraHuman SNS data collection Lambda execution failed'
             }),
             'headers': {
                 'Content-Type': 'application/json'
@@ -331,14 +462,63 @@ def lambda_handler(event, context):
 
 
 # Convenience function for local testing
-def test_locally(target_date: Optional[str] = None):
+def test_locally(participant_id: str = "test_participant", email: str = "test@example.com", target_date: Optional[str] = None):
     """
-    Function to test the UltraHuman data collection pipeline locally.
+    Function to test the UltraHuman SNS data collection pipeline locally.
+    
+    Args:
+        participant_id: Test participant ID
+        email: Test participant email
+        target_date: Optional date string (YYYY-MM-DD) to collect data for specific date
+    """
+    # Set default target date if not provided
+    if not target_date:
+        target_date = datetime.datetime.strftime((datetime.datetime.now() - datetime.timedelta(days=1)), '%Y-%m-%d')
+    
+    # Mock SNS event for local testing
+    event = {
+        "Records": [
+            {
+                "EventSource": "aws:sns",
+                "Sns": {
+                    "Message": json.dumps({
+                        "participant_id": participant_id,
+                        "email": email,
+                        "target_date": target_date,
+                        "timezone": "America/Phoenix"
+                    })
+                }
+            }
+        ]
+    }
+    
+    # Mock context object
+    class MockContext:
+        def __init__(self):
+            self.function_name = 'ultrahuman-sns-uploader-local-test'
+            self.aws_request_id = 'local-test-123'
+    
+    context = MockContext()
+    
+    # Run the lambda handler
+    response = lambda_handler(event, context)
+    
+    print("Response:")
+    print(json.dumps(json.loads(response['body']), indent=2))
+    
+    return response
+
+# Legacy test function for backward compatibility
+def test_locally_legacy(target_date: Optional[str] = None):
+    """
+    Legacy test function - now deprecated.
     
     Args:
         target_date: Optional date string (YYYY-MM-DD) to collect data for specific date
     """
-    # Mock event for local testing
+    print("WARNING: test_locally_legacy is deprecated. Use test_locally() with SNS parameters.")
+    
+    # Mock legacy event
     event = {}
     if target_date:
         event['target_date'] = target_date
@@ -346,8 +526,8 @@ def test_locally(target_date: Optional[str] = None):
     # Mock context object
     class MockContext:
         def __init__(self):
-            self.function_name = 'ultrahuman-data-uploader-local-test'
-            self.aws_request_id = 'local-test-123'
+            self.function_name = 'ultrahuman-data-uploader-legacy-test'
+            self.aws_request_id = 'legacy-test-123'
     
     context = MockContext()
     
@@ -361,5 +541,5 @@ def test_locally(target_date: Optional[str] = None):
 
 
 if __name__ == "__main__":
-    # For local testing
+    # For local testing with SNS
     test_locally()
