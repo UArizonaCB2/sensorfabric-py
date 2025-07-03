@@ -475,7 +475,7 @@ class MDH:
             List of participant objects with the following structure:
             [
                 {
-                    "participant_id": "AA-0000-0001",
+                    "participantIdentifier": "AA-0000-0001",
                     "customFields": {
                         "uh_sync_date": "2023-12-15T10:30:00Z"
                     }
@@ -511,7 +511,7 @@ class MDH:
         --------
         >>> participants = [
         ...     {
-        ...         "participant_id": "AA-0000-0001",
+        ...         "participantIdentifier": "AA-0000-0001",
         ...         "customFields": {"uh_sync_date": "2023-12-15"}
         ...     }
         ... ]
@@ -529,8 +529,8 @@ class MDH:
                 validation_errors.append(f"Participant {i}: Must be a dictionary")
                 continue
                 
-            if "participant_id" not in participant:
-                validation_errors.append(f"Participant {i}: Missing 'participant_id' field")
+            if "participantIdentifier" not in participant:
+                validation_errors.append(f"Participant {i}: Missing 'participantIdentifier' field")
                 
             if "customFields" not in participant:
                 validation_errors.append(f"Participant {i}: Missing 'customFields' field")
@@ -547,18 +547,9 @@ class MDH:
                 "errors": validation_errors
             }
         
-        # Transform input format to MDH API format
-        mdh_participants = []
-        for participant in participants:
-            mdh_participant = {
-                "participantIdentifier": participant["participant_id"],
-                "customFields": participant["customFields"]
-            }
-            mdh_participants.append(mdh_participant)
-        
         # Prepare request payload
         request_data = {
-            "participants": mdh_participants,
+            "participants": participants,
             "sendDefaultInvitationNotifications": False
         }
         
