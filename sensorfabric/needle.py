@@ -23,8 +23,6 @@ supported_methods = ['aws', 'mdh']
 
 DEFAULT_DATA_CATALOG = 'AwsDataCatalog'
 DEFAULT_WORKGROUP = 'primary'
-DEFAULT_PROJECT_NAME = 'uh-biobayb-dev'
-
 
 class Needle:
     def __init__(self, method=None,
@@ -81,10 +79,10 @@ class Needle:
 
         if self.method == 'mdh' and self.mdh_configuration is None:
             self.mdh_configuration = {
-                'account_secret' : os.getenv('MDH_SECRET_KEY'),
-                'account_name' : os.getenv('MDH_ACCOUNT_NAME'),
-                'project_id' : os.getenv('MDH_PROJECT_ID'),
-                'project_name' : os.getenv('MDH_PROJECT_NAME', DEFAULT_PROJECT_NAME),
+                'account_secret' : os.getenv('MDH_SECRET_KEY', None),
+                'account_name' : os.getenv('MDH_ACCOUNT_NAME', None),
+                'project_id' : os.getenv('MDH_PROJECT_ID', None),
+                'project_name' : os.getenv('MDH_PROJECT_NAME', None),
             }
 
         # Create the base athena connector depending on the configuration
@@ -144,6 +142,12 @@ class Needle:
         Internal method that configures sensorfabric to use MDH as the
         backend.
         """
+
+        # Do a sanity check to make sure that none of the parameters we got are not null.
+        assert(self.mdh_configuration['account_secret'] is not None)
+        assert(self.mdh_configuration['account_name'] is not None)
+        assert(self.mdh_configuration['project_id'] is not None)
+
         self.mdh = MDH(self.mdh_configuration['account_secret'],
                        self.mdh_configuration['account_name'],
                        self.mdh_configuration['project_id'])
