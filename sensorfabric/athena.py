@@ -59,6 +59,8 @@ class athena:
         self.offlineCache = offlineCache
         self.s3_location = s3_location
 
+        session = boto3
+
         if profile_name is None:
             if not ('AWS_PROFILE' in os.environ):
                 raise Exception('Could not find aws profile to use. Either set it in AWS_PROFILE or pass it explicitly using the parameter profile_name')
@@ -66,8 +68,8 @@ class athena:
             # We need to use the profile name that was provided in this call.
             session = boto3.Session(profile_name=profile_name)
 
-        self.client = boto3.client('athena')
-        self.s3 = boto3.client('s3')
+        self.client = session.client('athena')
+        self.s3 = session.client('s3')
 
         self.cacheDir = '.cache'
         self.csvDir = '.csv'
