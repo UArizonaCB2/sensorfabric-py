@@ -16,6 +16,9 @@ from datetime import datetime, timedelta
 from uuid import uuid4
 import jwt
 import requests
+import os
+from typing import Optional, List, Dict, Any
+
 
 class MDH:
     """
@@ -24,14 +27,14 @@ class MDH:
     It also contains convinient wrappers around methods that can be used to access several different sensor
     related API functionality.
     """
-    def __init__(self, account_secret : str,
-                 account_name : str,
-                 project_id : str):
+    def __init__(self, account_secret : Optional[str] = None,
+                 account_name : Optional[str] = None,
+                 project_id : Optional[str] = None):
         self.token = None
         self.tokenexp = None
-        self.account_secret = account_secret
-        self.account_name = account_name
-        self.project_id = project_id
+        self.account_secret = os.getenv('MDH_SECRET_KEY', account_secret)
+        self.account_name = os.getenv('MDH_ACCOUNT_NAME', account_name)
+        self.project_id = os.getenv('MDH_PROJECT_ID', project_id)
 
     def genServiceToken(self, scope='api', ttl=1) -> str :
         """
@@ -121,6 +124,38 @@ class MDH:
 
         return response.json()
 
+    def makePostRequests(self, endpoint: str, data: dict, params=None) -> dict:
+        """
+        Helper method to make POST API requests to MDH.
+        
+        Parameters
+        ----------
+        endpoint : str
+            The API endpoint URL
+        data : dict
+            JSON data to send in the request body
+        params : dict, optional
+            Query parameters for the request
+            
+        Returns
+        -------
+        dict
+            JSON response from the API
+        """
+        if not self.isTokenAlive():
+            self.genServiceToken()
+
+        headers = {
+            'Authorization': 'Bearer ' + self.token,
+            'Accept': 'application/json',
+            'Content-Type': 'application/json; charset=utf-8'
+        }
+
+        response = requests.post(url=endpoint, headers=headers, json=data, params=params)
+        response.raise_for_status()
+
+        return response.json()
+
     def getAllParticipants(self, queryParam=None):
         """
         Method which returns all participant information.
@@ -131,6 +166,80 @@ class MDH:
         queryParam : dict, optional
             Additional query parameters for the API request
             
+
+        Participant Object Structure:
+        {
+            "accountEmail": "email_address@domain.com",
+            "accountMobilePhone": null,
+            "customFields": {
+                "Coments": "",
+                "Contacted": "",
+                "DeclinedReason": "",
+                "DeliverySite": "",
+                "PrenatalCareSite": "",
+                "RecruitmentDate": "",
+                "WithdrawalDate": "",
+                "compensation_choice": "",
+                "compensation_initials": "",
+                "conception_date": "",
+                "cuffSize": "",
+                "daily_symptom_count": "",
+                "delivery_date": "",
+                "ema_enabled": "",
+                "ema_evening_close": "",
+                "ema_evening_completed": "",
+                "ema_evening_time": "",
+                "ema_metadata1": "",
+                "ema_metadata2": "",
+                "ema_metadata3": "",
+                "ema_metadata4": "",
+                "ema_morning_close": "",
+                "ema_morning_completed": "",
+                "ema_morning_time": "",
+                "ema_random1": "",
+                "ema_random2": "",
+                "ema_random3": "",
+                "ema_random4": "",
+                "ema_reminder_time": "",
+                "ema_status": "",
+                "future_use_initials": "",
+                "ga_20_sent": "",
+                "ga_28_sent": "",
+                "ga_36_sent": "",
+                "icf_version_date": "",
+                "interview_initials": "",
+                "oura": "",
+                "postpartum_sent": "",
+                "pregnancy_proof": "",
+                "sgAvatar": "",
+                "total_symptom_count": "",
+                "uh_email": "",
+                "ultrahuman": "",
+                "weekly_survey_active": "",
+                "weekly_symptom_count": ""
+            },
+            "demographics": {
+                "email": "email_address@domain.com",
+                "firstName": "First Name",
+                "lastName": "Last Name",
+                "timeZone": "America/Phoenix",
+                "unsubscribedFromEmails": "false",
+                "unsubscribedFromSms": "false",
+                "utcOffset": "-07:00:00"
+            },
+            "enrolled": true,
+            "enrollmentDate": "2025-06-24T17:51:07.651+00:00",
+            "excludeFromExport": false,
+            "id": "uuid4",
+            "insertedDate": "2025-06-24T17:50:20.25+00:00",
+            "institutionCode": "",
+            "invitationStatus": null,
+            "linkIdentifier": "uuid4",
+            "participantIdentifier": "AA-0000-0000",
+            "viewParticipantRecordLink": null,
+            "withdrawDate": null
+        }
+
         Returns
         -------
         dict
@@ -352,4 +461,161 @@ class MDH:
                 
         else:
             print('Invalid date range format. Please provide a 2-entry tuple (start_date, end_date).')
+
+    def update_participants(self, participants: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Update participants using the MDH Bulk Add/Update API.
+        
+        This method allows bulk updating of participant custom fields, particularly
+        useful for updating sync dates or other metadata.
+        
+        Parameters
+        ----------
+        participants : List[Dict[str, Any]]
+            List of participant objects with the following structure:
+            [
+                {
+                    "participantIdentifier": "AA-0000-0001",
+                    "customFields": {
+                        "uh_sync_date": "2023-12-15T10:30:00Z"
+                    }
+                }
+            ]
+            
+        Returns
+        -------
+        Dict[str, Any]
+            Response from the API with the following structure:
+            {
+                "success": bool,
+                "totalAdded": int,
+                "totalUpdated": int,
+                "results": [
+                    {
+                        "participantIdentifier": "AA-0000-0001",
+                        "action": "updated",
+                        "error": str (if applicable)
+                    }
+                ],
+                "errors": [str] (if any validation errors)
+            }
+            
+        Raises
+        ------
+        ValueError
+            If participants list is empty or contains invalid data
+        requests.exceptions.HTTPError
+            If the API request fails
+            
+        Examples
+        --------
+        >>> participants = [
+        ...     {
+        ...         "participantIdentifier": "AA-0000-0001",
+        ...         "customFields": {"uh_sync_date": "2023-12-15"}
+        ...     }
+        ... ]
+        >>> result = mdh.update_participants(participants)
+        >>> print(f"Updated {result['totalUpdated']} participants")
+        """
+        # Input validation
+        if not participants:
+            raise ValueError("Participants list cannot be empty")
+        
+        # Validate each participant has required fields
+        validation_errors = []
+        for i, participant in enumerate(participants):
+            if not isinstance(participant, dict):
+                validation_errors.append(f"Participant {i}: Must be a dictionary")
+                continue
+                
+            if "participantIdentifier" not in participant:
+                validation_errors.append(f"Participant {i}: Missing 'participantIdentifier' field")
+                
+            if "customFields" not in participant:
+                validation_errors.append(f"Participant {i}: Missing 'customFields' field")
+            elif not isinstance(participant["customFields"], dict):
+                validation_errors.append(f"Participant {i}: 'customFields' must be a dictionary")
+        
+        if validation_errors:
+            return {
+                "success": False,
+                "totalAdded": 0,
+                "totalUpdated": 0,
+                "totalErrors": len(validation_errors),
+                "results": [],
+                "errors": validation_errors
+            }
+        
+        # Prepare request payload
+        request_data = {
+            "participants": participants,
+            "sendDefaultInvitationNotifications": False
+        }
+        
+        # Prepare query parameters
+        query_params = {
+            "allowUpdate": "true"
+        }
+        
+        try:
+            # Make API request
+            url = ep.MDH_BASE + ep.MDH_PROJ + 'participants'
+            response = self.makePostRequests(
+                url.format(projectID=self.project_id),
+                data=request_data,
+                params=query_params
+            )
+            
+            # Process response
+            total_added = response.get('totalAdded', 0)
+            total_updated = response.get('totalUpdated', 0)
+            results = response.get('results', [])
+            result_details = []
+            
+            for result in results:
+                resObj = result.get('result', {})
+                participant_id = resObj.get('participantIdentifier')
+                action = result.get('actionTaken')
+                
+                result_detail = {
+                    "participantIdentifier": participant_id,
+                    "action": action,
+                }
+                
+                result_details.append(result_detail)
+            
+            return {
+                "success": True,
+                "totalAdded": total_added,
+                "totalUpdated": total_updated,
+                "results": result_details,
+                "errors": []
+            }
+            
+        except requests.exceptions.HTTPError as e:
+            error_msg = f"HTTP error during participant update: {str(e)}"
+            if hasattr(e.response, 'json'):
+                try:
+                    error_details = e.response.json()
+                    error_msg += f" - {error_details}"
+                except:
+                    pass
+            
+            return {
+                "success": False,
+                "totalAdded": 0,
+                "totalUpdated": 0,
+                "results": [],
+                "errors": [error_msg]
+            }
+        
+        except Exception as e:
+            return {
+                "success": False,
+                "totalAdded": 0,
+                "totalUpdated": 0,
+                "results": [],
+                "errors": [f"Unexpected error during participant update: {str(e)}"]
+            }
 

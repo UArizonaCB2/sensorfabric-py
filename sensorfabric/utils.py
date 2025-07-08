@@ -14,8 +14,13 @@ Just a set of utility files to help out.
 
 import configparser
 import pathlib
-from datetime import datetime, timedelta
-from typing import Dict, List, Any, Union
+from datetime import datetime, timedelta, timezone
+from typing import Dict, List, Any, Union, Optional
+import pytz
+import jsonschema
+import json
+import os
+
 
 def appendAWSCredentials(profilename : str,
                          aws_credentials,
@@ -218,3 +223,161 @@ def flatten_json_to_columns(json_data: Dict[str, Any], fill: bool = False, separ
             result[key] = values
     
     return result
+
+
+def convert_dict_timestamps(data: Union[Dict[str, Any], List[Any]], timezone: Optional[str] = None) -> Union[Dict[str, Any], List[Any]]:
+    """
+    Recursively convert Unix timestamps to ISO8601 format in a dictionary or list.
+    
+    This function processes dictionaries and lists recursively, looking for keys that contain
+    "timestamp", "_start", or "_end". For matching keys, it creates additional keys with
+    ISO8601 formatted timestamps in UTC and optionally in a specified timezone.
+    
+    Parameters
+    ----------
+    data : dict or list
+        The input data structure to process
+    timezone : str, optional
+        Timezone string (e.g., "America/Phoenix") to create additional timezone-aware timestamps
+        
+    Returns
+    -------
+    dict or list
+        The processed data structure with additional ISO8601 timestamp keys
+        
+    Examples
+    --------
+    >>> input_data = {
+    ...     "timestamp": [1672531200, 1672531201],
+    ...     "object_sleep_graph_data_start": [1672531200, 1672531200],
+    ...     "nested": {
+    ...         "inner_timestamp": 1672531200
+    ...     }
+    ... }
+    >>> convert_dict_timestamps(input_data, "America/Phoenix")
+    {
+        "timestamp": [1672531200, 1672531201],
+        "object_sleep_graph_data_start": [1672531200, 1672531200],
+        "nested": {
+            "inner_timestamp": 1672531200,
+            "inner_timestamp_iso8601": "2023-01-01T00:00:00Z",
+            "inner_timestamp_iso8601_tz": "2022-12-31T17:00:00-07:00"
+        },
+        "timestamp_iso8601": ["2023-01-01T00:00:00Z", "2023-01-01T00:00:01Z"],
+        "object_sleep_graph_data_start_iso8601": ["2023-01-01T00:00:00Z", "2023-01-01T00:00:00Z"],
+        "timestamp_iso8601_tz": ["2022-12-31T17:00:00-07:00", "2022-12-31T17:00:01-07:00"],
+        "object_sleep_graph_data_start_iso8601_tz": ["2022-12-31T17:00:00-07:00", "2022-12-31T17:00:00-07:00"]
+    }
+    """
+    def _is_timestamp_key(key: str) -> bool:
+        """Check if a key contains timestamp-related terms."""
+        key_lower = key.lower()
+        return any(term in key_lower for term in ["timestamp", "_start", "_end"])
+    
+    def _convert_unix_to_iso8601(unix_timestamp: Union[int, float], target_timezone: Optional[str] = None) -> str:
+        """Convert Unix timestamp to ISO8601 format."""
+        try:
+            # Convert to UTC datetime
+            dt_utc = datetime.fromtimestamp(unix_timestamp)
+            
+            if target_timezone:
+                # Convert to specified timezone
+                target_tz = pytz.timezone(target_timezone)
+                dt_tz = dt_utc.astimezone(target_tz)
+                return dt_tz.isoformat()
+            else:
+                # Return UTC with Z suffix
+                return dt_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
+        except (ValueError, TypeError, OSError):
+            # Return original value if conversion fails
+            return str(unix_timestamp)
+    
+    def _process_timestamp_value(value: Any, target_timezone: Optional[str] = None) -> Any:
+        """Process a timestamp value (single value or list)."""
+        if isinstance(value, (int, float)):
+            return _convert_unix_to_iso8601(value, target_timezone)
+        elif isinstance(value, list):
+            return [_convert_unix_to_iso8601(v, target_timezone) if isinstance(v, (int, float)) else v for v in value]
+        else:
+            return value
+    
+    def _process_dict(d: Dict[str, Any]) -> Dict[str, Any]:
+        """Process a dictionary recursively."""
+        result = {}
+        timestamp_keys = []
+        
+        # First pass: process all existing keys recursively
+        for key, value in d.items():
+            if isinstance(value, dict):
+                result[key] = _process_dict(value)
+            elif isinstance(value, list):
+                result[key] = _process_list(value)
+            else:
+                result[key] = value
+            
+            # Track timestamp keys for later processing
+            if _is_timestamp_key(key):
+                timestamp_keys.append(key)
+        
+        # Second pass: add ISO8601 versions of timestamp keys
+        for key in timestamp_keys:
+            value = result[key]
+            
+            # Add UTC ISO8601 version
+            iso8601_key = f"{key}_iso8601"
+            result[iso8601_key] = _process_timestamp_value(value)
+            
+            # Add timezone-specific version if timezone is provided
+            if timezone:
+                iso8601_tz_key = f"{key}_iso8601_tz"
+                result[iso8601_tz_key] = _process_timestamp_value(value, timezone)
+        
+        return result
+    
+    def _process_list(lst: List[Any]) -> List[Any]:
+        """Process a list recursively."""
+        result = []
+        for item in lst:
+            if isinstance(item, dict):
+                result.append(_process_dict(item))
+            elif isinstance(item, list):
+                result.append(_process_list(item))
+            else:
+                result.append(item)
+        return result
+    
+    # Main processing logic
+    if isinstance(data, dict):
+        return _process_dict(data)
+    elif isinstance(data, list):
+        return _process_list(data)
+    else:
+        return data
+
+
+def validate_sensor_data_schema(json_data: List[Dict[str, Any]]) -> None:
+    """
+    Validate the sensor data against the JSON schema.
+    
+    Args:
+        json_data: The sensor data to validate
+        
+    Raises:
+        jsonschema.ValidationError: If validation fails
+        FileNotFoundError: If schema file is not found
+    """
+    # Get the schema file path relative to this module
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    schema_path = os.path.join(current_dir, 'schemas', 'sensor_data_schema_flattened.json')
+    
+    try:
+        with open(schema_path, 'r') as schema_file:
+            schema = json.load(schema_file)
+    except FileNotFoundError:
+        raise FileNotFoundError(f"Schema file not found at: {schema_path}")
+    
+    # Validate the data against the schema
+    try:
+        jsonschema.validate(json_data, schema)
+    except jsonschema.ValidationError as e:
+        raise jsonschema.ValidationError(f"Sensor data validation failed: {e.message}")

@@ -21,10 +21,15 @@ import os
 
 supported_methods = ['aws', 'mdh']
 
+DEFAULT_DATA_CATALOG = 'AwsDataCatalog'
+DEFAULT_WORKGROUP = 'primary'
+DEFAULT_PROJECT_NAME = 'uh-biobayb-dev'
+
+
 class Needle:
     def __init__(self, method=None,
                  aws_configuration=None,
-                 mdh_configiration=None,
+                 mdh_configuration=None,
                  offlineCache=False,
                  profileName='sensorfabric'):
         """
@@ -54,32 +59,32 @@ class Needle:
             raise Exception('{} method is currently not supported'.format(self.method))
 
         self.aws_configuration = aws_configuration
-        self.mdh_configuration = mdh_configiration
+        self.mdh_configuration = mdh_configuration
         self.offlineCache = offlineCache
         self.db = None
         self.mdh = None
 
         self.profileName = profileName
         self.aws_configuration = aws_configuration
-        self.mdh_configuration = mdh_configiration
+        self.mdh_configuration = mdh_configuration
         self.mdh_org_id = None
 
         # Set the configuration from environment variables if they have
         # not been passed.
         if self.method == 'aws' and self.aws_configuration is None:
             self.aws_configuration = {
-                'database' : os.environ['SF_DATABASE'],
-                'catalog' : os.environ['SF_CATALOG'] if 'SF_CATALOG' in os.environ else 'AwsDataCatalog',
-                'workgroup' : os.environ['SF_WORKGROUP'] if 'SF_WORKGROUP' in os.environ else 'primary',
-                's3_location' : os.environ['SF_S3LOC'] if 'SF_S3LOC' in os.environ else None
+                'database' : os.getenv('SF_DATABASE'),
+                'catalog' : os.getenv('SF_CATALOG', DEFAULT_DATA_CATALOG),
+                'workgroup' : os.getenv('SF_WORKGROUP', DEFAULT_WORKGROUP),
+                's3_location' : os.getenv('SF_S3LOC', None),
             }
 
         if self.method == 'mdh' and self.mdh_configuration is None:
             self.mdh_configuration = {
-                'account_secret' : os.environ['MDH_SECRET'],
-                'account_name' : os.environ['MDH_ACC_NAME'],
-                'project_name' : os.environ['MDH_PROJ_NAME'],
-                'project_id' : os.environ['MDH_PROJ_ID']
+                'account_secret' : os.getenv('MDH_SECRET_KEY'),
+                'account_name' : os.getenv('MDH_ACCOUNT_NAME'),
+                'project_id' : os.getenv('MDH_PROJECT_ID'),
+                'project_name' : os.getenv('MDH_PROJECT_NAME', DEFAULT_PROJECT_NAME),
             }
 
         # Create the base athena connector depending on the configuration
@@ -116,6 +121,8 @@ class Needle:
 
         elif self.method == 'aws':
            self.db = athena(database=self.aws_configuration['database'],
+                            catalog=self.aws_configuration['catalog'],
+                            workgroup=self.aws_configuration['workgroup'],
                             offlineCache=offlineCache,
                             profile_name=profileName)
 
