@@ -272,8 +272,7 @@
   },
   "required": [
     "type",
-    "object_values_timestamp",
-    "pid"
+    "object_values_timestamp"
   ],
   "additionalProperties": false
 }

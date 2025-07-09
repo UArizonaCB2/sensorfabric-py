@@ -130,7 +130,7 @@ def readAWSCredentials(profilename : str,
     return None
 
 
-def flatten_json_to_columns(json_data: Dict[str, Any], participant_id: str, fill: bool = False, separator: str = "_") -> Dict[str, List[Any]]:
+def flatten_json_to_columns(json_data: Dict[str, Any], fill: bool = False, separator: str = "_", participant_id: Optional[str] = None) -> Dict[str, List[Any]]:
     """
     Flatten a JSON structure from row-oriented to column-oriented format.
     
@@ -170,7 +170,8 @@ def flatten_json_to_columns(json_data: Dict[str, Any], participant_id: str, fill
     result = {}
     
     # insert participant ID
-    json_data['pid'] = participant_id
+    if participant_id is not None:
+        json_data['pid'] = participant_id
 
     # First pass: flatten all values and identify the maximum length
     max_length = 1
