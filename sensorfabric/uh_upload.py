@@ -142,8 +142,13 @@ class UltrahumanDataUploader:
         participant_id = participant.get('participantIdentifier')
         
         # For SNS-based processing, email and timezone come directly from message
-        email = participant.get('email')
-        timezone = participant.get('timezone', 'America/Phoenix')
+        email = participant.get('accountEmail')
+        demographics = participant.get('demographics', {})
+        if 'email' in participant and participant.get('email') is not None and participant.get('email') != '':
+            email = participant.get('email')
+        if 'uh_email' in participant and participant.get('uh_email') is not None and participant.get('uh_email') != '':
+            email = participant.get('uh_email')
+        timezone = demographics.get('timeZone', 'America/Phoenix')
         
         # Use target_date from SNS message if available, otherwise use instance target_date
         target_date = participant.get('target_date', self.target_date)
@@ -155,6 +160,7 @@ class UltrahumanDataUploader:
         try:
             # Get DataFrame for this participant and date
             json_obj = self.uh_api.get_metrics(email, target_date)
+            # we may want to store the raw json file alongside the parquet files.
             # pull out UH keys -
             # response structure is {"data": {"metric_data": [{}]}
             data = json_obj.get('data', {})
@@ -170,10 +176,9 @@ class UltrahumanDataUploader:
                 if type(metric) == dict and 'object_values' in metric and len(metric['object_values']) <= 0:
                     # empty data.
                     continue
-                flattened = flatten_json_to_columns(metric, fill=True)
+                flattened = flatten_json_to_columns(metric, participant_id, fill=True)
                 converted = convert_dict_timestamps(flattened, timezone)
                 try:
-                    validate_sensor_data_schema(converted)
                     obj_values = converted.get('object_values', None)
                     obj_total = converted.get('object_total', None)
                     obj_values_value = converted.get('object_values_value', None)
@@ -182,6 +187,7 @@ class UltrahumanDataUploader:
                         logger.error(f"Empty sensor data for participant {participant_id}, metric {metric_type}")
                         continue
 
+                    validate_sensor_data_schema(converted)
                 except jsonschema.ValidationError as e:
                     logger.error(f"Sensor data validation failed for participant {participant_id}, metric {metric_type}: {e.message}")
                     continue
@@ -192,10 +198,10 @@ class UltrahumanDataUploader:
                 else:
                     wr.s3.to_parquet(
                         df=df,
-                        path=f"s3://{self.data_bucket}/dataset/{participant_id}/{metric_type}/",
+                        path=f"s3://{self.data_bucket}/raw/dataset/{metric_type}",
                         dataset=True,
                         database=self.database_name,
-                        table=participant_id,
+                        table=metric_type,
                         s3_additional_kwargs={
                             'Metadata': {
                                 'participant_id': participant_id,
@@ -207,6 +213,7 @@ class UltrahumanDataUploader:
                                 'record_count': str(len(df))
                             }
                         },
+                        partition_cols=['pid'],
                         mode='append',
                     )
                     record_count += len(df)
@@ -248,14 +255,18 @@ class UltrahumanDataUploader:
             current_timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
             
             # Update participant's custom field
-            update_data = {
-                'customFields': {
-                    'uh_sync_date': current_timestamp
+            update_data = [
+                {
+                    participant_id : {
+                        'customFields': {
+                            'uh_sync_date': current_timestamp
+                        }
+                    }
                 }
-            }
+            ]
             
             # Use MDH API to update participant
-            self.needle.mdh.updateParticipant(participant_id, update_data)
+            self.needle.mdh.update_participants(update_data)
             
             logger.info(f"Updated uh_sync_date for participant {participant_id} to {current_timestamp}")
             
