@@ -1,0 +1,20 @@
+{
+  "version": "38.0.1",
+  "files": {
+    "cd9c06e314fa2f3509ea73adb6aab117332bed7be663389c164849713a255ab0": {
+      "source": {
+        "path": "SensorFabricLambdaStack.template.json",
+        "packaging": "file"
+      },
+      "destinations": {
+        "509812589231-us-east-1": {
+          "bucketName": "cdk-hnb659fds-assets-509812589231-us-east-1",
+          "objectKey": "cd9c06e314fa2f3509ea73adb6aab117332bed7be663389c164849713a255ab0.json",
+          "region": "us-east-1",
+          "assumeRoleArn": "arn:${AWS::Partition}:iam::509812589231:role/cdk-hnb659fds-file-publishing-role-509812589231-us-east-1"
+        }
+      }
+    }
+  },
+  "dockerImages": {}
+}

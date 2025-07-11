@@ -1,0 +1,198 @@
+{
+  "version": "38.0.1",
+  "artifacts": {
+    "SensorFabricLambdaStack.assets": {
+      "type": "cdk:asset-manifest",
+      "properties": {
+        "file": "SensorFabricLambdaStack.assets.json",
+        "requiresBootstrapStackVersion": 6,
+        "bootstrapStackVersionSsmParameter": "/cdk-bootstrap/hnb659fds/version"
+      }
+    },
+    "SensorFabricLambdaStack": {
+      "type": "aws:cloudformation:stack",
+      "environment": "aws://509812589231/us-east-1",
+      "properties": {
+        "templateFile": "SensorFabricLambdaStack.template.json",
+        "terminationProtection": false,
+        "validateOnSynth": false,
+        "notificationArns": [],
+        "assumeRoleArn": "arn:${AWS::Partition}:iam::509812589231:role/cdk-hnb659fds-deploy-role-509812589231-us-east-1",
+        "cloudFormationExecutionRoleArn": "arn:${AWS::Partition}:iam::509812589231:role/cdk-hnb659fds-cfn-exec-role-509812589231-us-east-1",
+        "stackTemplateAssetObjectUrl": "s3://cdk-hnb659fds-assets-509812589231-us-east-1/cd9c06e314fa2f3509ea73adb6aab117332bed7be663389c164849713a255ab0.json",
+        "requiresBootstrapStackVersion": 6,
+        "bootstrapStackVersionSsmParameter": "/cdk-bootstrap/hnb659fds/version",
+        "additionalDependencies": [
+          "SensorFabricLambdaStack.assets"
+        ],
+        "lookupRole": {
+          "arn": "arn:${AWS::Partition}:iam::509812589231:role/cdk-hnb659fds-lookup-role-509812589231-us-east-1",
+          "requiresBootstrapStackVersion": 8,
+          "bootstrapStackVersionSsmParameter": "/cdk-bootstrap/hnb659fds/version"
+        }
+      },
+      "dependencies": [
+        "SensorFabricLambdaStack.assets"
+      ],
+      "metadata": {
+        "/SensorFabricLambdaStack/uh-biobayb-dev_LambdaExecutionRole/Resource": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "uhbiobaybdevLambdaExecutionRole671B0381"
+          }
+        ],
+        "/SensorFabricLambdaStack/uh-biobayb-dev_LambdaExecutionRole/DefaultPolicy/Resource": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "uhbiobaybdevLambdaExecutionRoleDefaultPolicyBAA9A346"
+          }
+        ],
+        "/SensorFabricLambdaStack/UHDataCollectionTopic/Resource": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "UHDataCollectionTopicC8260047"
+          }
+        ],
+        "/SensorFabricLambdaStack/UHDataCollectionTopicARN": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "UHDataCollectionTopicARN"
+          }
+        ],
+        "/SensorFabricLambdaStack/UHPublisherDLQ/Resource": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "UHPublisherDLQD94AFA36"
+          }
+        ],
+        "/SensorFabricLambdaStack/UHPublisherDLQARN": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "UHPublisherDLQARN"
+          }
+        ],
+        "/SensorFabricLambdaStack/uh-biobayb-dev_biobayb_uh_uploader_LogGroup/Resource": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "uhbiobaybdevbiobaybuhuploaderLogGroupDB577806"
+          }
+        ],
+        "/SensorFabricLambdaStack/uh-biobayb-dev_biobayb_uh_uploader_Lambda/DeadLetterQueue/Resource": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "uhbiobaybdevbiobaybuhuploaderLambdaDeadLetterQueue3F13E57D"
+          }
+        ],
+        "/SensorFabricLambdaStack/uh-biobayb-dev_biobayb_uh_uploader_Lambda/Resource": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "uhbiobaybdevbiobaybuhuploaderLambda7E7F4FBC"
+          }
+        ],
+        "/SensorFabricLambdaStack/uh-biobayb-dev_biobayb_uh_uploader_Lambda/EventInvokeConfig/Resource": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "uhbiobaybdevbiobaybuhuploaderLambdaEventInvokeConfig2C0F4442"
+          }
+        ],
+        "/SensorFabricLambdaStack/uh-biobayb-dev_biobayb_uh_uploader_Lambda/AllowInvoke:SensorFabricLambdaStackUHDataCollectionTopicF4D97FB3": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "uhbiobaybdevbiobaybuhuploaderLambdaAllowInvokeSensorFabricLambdaStackUHDataCollectionTopicF4D97FB3AD16EF73"
+          }
+        ],
+        "/SensorFabricLambdaStack/uh-biobayb-dev_biobayb_uh_uploader_Lambda/UHDataCollectionTopic/Resource": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "uhbiobaybdevbiobaybuhuploaderLambdaUHDataCollectionTopic891BD6EF"
+          }
+        ],
+        "/SensorFabricLambdaStack/uh-biobayb-dev_biobayb_uh_uploader_Lambda_ARN": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "uhbiobaybdevbiobaybuhuploaderLambdaARN"
+          }
+        ],
+        "/SensorFabricLambdaStack/uh-biobayb-dev_biobayb_uh_sns_publisher_LogGroup/Resource": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "uhbiobaybdevbiobaybuhsnspublisherLogGroupA550F19A"
+          }
+        ],
+        "/SensorFabricLambdaStack/uh-biobayb-dev_biobayb_uh_sns_publisher_Lambda/DeadLetterQueue/Resource": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "uhbiobaybdevbiobaybuhsnspublisherLambdaDeadLetterQueue39A7BC0A"
+          }
+        ],
+        "/SensorFabricLambdaStack/uh-biobayb-dev_biobayb_uh_sns_publisher_Lambda/Resource": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "uhbiobaybdevbiobaybuhsnspublisherLambdaC0F15413"
+          }
+        ],
+        "/SensorFabricLambdaStack/uh-biobayb-dev_biobayb_uh_sns_publisher_Lambda/EventInvokeConfig/Resource": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "uhbiobaybdevbiobaybuhsnspublisherLambdaEventInvokeConfig2A3C47C6"
+          }
+        ],
+        "/SensorFabricLambdaStack/uh-biobayb-dev_biobayb_uh_sns_publisher_Lambda_ARN": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "uhbiobaybdevbiobaybuhsnspublisherLambdaARN"
+          }
+        ],
+        "/SensorFabricLambdaStack/uh-biobayb-dev_UHPublisherScheduleRule/Resource": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "uhbiobaybdevUHPublisherScheduleRuleEB29F4D4"
+          }
+        ],
+        "/SensorFabricLambdaStack/uh-biobayb-dev_UHPublisherScheduleRule/AllowEventRuleSensorFabricLambdaStackuhbiobaybdevbiobaybuhsnspublisherLambda9255A1CF": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "uhbiobaybdevUHPublisherScheduleRuleAllowEventRuleSensorFabricLambdaStackuhbiobaybdevbiobaybuhsnspublisherLambda9255A1CFDEEB27CE"
+          }
+        ],
+        "/SensorFabricLambdaStack/uh-biobayb-dev_UHUploaderManualTriggerRule/Resource": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "uhbiobaybdevUHUploaderManualTriggerRuleCDEA8E3B"
+          }
+        ],
+        "/SensorFabricLambdaStack/uh-biobayb-dev_UHUploaderManualTriggerRule/AllowEventRuleSensorFabricLambdaStackuhbiobaybdevbiobaybuhuploaderLambdaC4D4A7C6": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "uhbiobaybdevUHUploaderManualTriggerRuleAllowEventRuleSensorFabricLambdaStackuhbiobaybdevbiobaybuhuploaderLambdaC4D4A7C65424766A"
+          }
+        ],
+        "/SensorFabricLambdaStack/CDKMetadata/Default": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "CDKMetadata"
+          }
+        ],
+        "/SensorFabricLambdaStack/BootstrapVersion": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "BootstrapVersion"
+          }
+        ],
+        "/SensorFabricLambdaStack/CheckBootstrapVersion": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "CheckBootstrapVersion"
+          }
+        ]
+      },
+      "displayName": "SensorFabricLambdaStack"
+    },
+    "Tree": {
+      "type": "cdk:tree",
+      "properties": {
+        "file": "tree.json"
+      }
+    }
+  }
+}

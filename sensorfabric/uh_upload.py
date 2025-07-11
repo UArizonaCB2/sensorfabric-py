@@ -5,8 +5,8 @@ from typing import Dict, List, Any, Optional
 import logging
 import traceback
 import awswrangler as wr
-
-from sensorfabric.needle import Needle
+import boto3
+from sensorfabric.mdh import MDH
 from sensorfabric.uh import UltrahumanAPI
 from sensorfabric.utils import flatten_json_to_columns, convert_dict_timestamps, validate_sensor_data_schema
 import pandas as pd
@@ -30,11 +30,11 @@ class UltrahumanDataUploader:
     1. Processing SNS messages containing participant data
     2. Collecting UltraHuman sensor data for specified participants
     3. Uploading parquet data to S3 in organized folder structure
-    4. Updating participant sync dates in MDH via Needle
+    4. Updating participant sync dates in MDH
     """
     
     def __init__(self):
-        self.needle = None
+        self.mdh = None
         self.uh_api = None
 
         # S3 configuration from environment variables
@@ -48,7 +48,9 @@ class UltrahumanDataUploader:
         self.target_date = None
 
     def _check_create_database(self):
-        if self.database_name not in wr.catalog.databases():
+        logger.info(f"Checking for database: {self.database_name}")
+        logger.info(wr.catalog.databases())
+        if self.database_name not in wr.catalog.databases().values:
             logger.info(f"Database {self.database_name} does not exist. Creating...")
             wr.catalog.create_database(self.database_name, exist_ok=True)
             logger.info(f"Created database: {self.database_name}")
@@ -56,14 +58,13 @@ class UltrahumanDataUploader:
     def _initialize_connections(self):
         """Initialize MDH and Ultrahuman API connections."""
         try:
-            # Initialize MDH connection via Needle
+            # Initialize MDH connection
             mdh_configuration = {
                 'account_secret': os.environ.get('MDH_SECRET_KEY'),
                 'account_name': os.environ.get('MDH_ACCOUNT_NAME'),
                 'project_id': os.environ.get('MDH_PROJECT_ID'),
-                'project_name': os.environ.get('MDH_PROJECT_NAME', DEFAULT_PROJECT_NAME),
             }
-            self.needle = Needle(method='mdh', mdh_configuration=mdh_configuration)
+            self.mdh = MDH(**mdh_configuration)
             logger.info("MDH connection initialized successfully")
             
             # Initialize Ultrahuman API
@@ -176,7 +177,7 @@ class UltrahumanDataUploader:
                 if type(metric) == dict and 'object_values' in metric and len(metric['object_values']) <= 0:
                     # empty data.
                     continue
-                flattened = flatten_json_to_columns(metric, participant_id, fill=True)
+                flattened = flatten_json_to_columns(json_data=metric, participant_id=participant_id, fill=True)
                 converted = convert_dict_timestamps(flattened, timezone)
                 try:
                     obj_values = converted.get('object_values', None)
@@ -266,7 +267,7 @@ class UltrahumanDataUploader:
             ]
             
             # Use MDH API to update participant
-            self.needle.mdh.update_participants(update_data)
+            self.mdh.update_participants(update_data)
             
             logger.info(f"Updated uh_sync_date for participant {participant_id} to {current_timestamp}")
             
@@ -384,6 +385,43 @@ class UltrahumanDataUploader:
             }
 
 
+def get_secret():
+    """
+    Uses secretmanager to fill in MDH secrets
+    """
+    secret_name = os.getenv("AWS_SECRET_NAME")
+    region_name = os.getenv("AWS_REGION", "us-east-1")
+    
+    # Create a Secrets Manager client
+    session = boto3.session.Session()
+    client = session.client(
+        service_name='secretsmanager',
+        region_name=region_name
+    )
+    
+    try:
+        get_secret_value_response = client.get_secret_value(SecretId=secret_name)
+    except ClientError as e:
+        if e.response['Error']['Code'] == 'ResourceNotFoundException':
+            logger.error("The requested secret " + secret_name + " was not found")
+        elif e.response['Error']['Code'] == 'InvalidRequestException':
+            logger.error("The request was invalid due to: " + e.response['Error']['Message'])
+        elif e.response['Error']['Code'] == 'InvalidParameterException':
+            logger.error("The request had invalid params - " + e.response['Error']['Message'])
+        elif e.response['Error']['Code'] == 'DecryptionFailure':
+            logger.error("The requested secret can't be decrypted using the provided KMS key - " + e.response['Error']['Message'])
+        elif e.response['Error']['Code'] == 'InternalServiceError':
+            logger.error("The request was not processed because of an internal error. - " + e.response['Error']['Message'])
+        raise e
+    else:
+        if 'SecretString' in get_secret_value_response:
+            secret = get_secret_value_response['SecretString']
+            return json.loads(secret)
+        else:
+            decoded_binary_secret = base64.b64decode(get_secret_value_response['SecretBinary'])
+            return json.loads(decoded_binary_secret)
+
+
 def lambda_handler(event, context):
     """
     AWS Lambda entry point for UltraHuman data collection via SNS.
@@ -402,17 +440,27 @@ def lambda_handler(event, context):
     
     Environment variables required:
     - SF_DATA_BUCKET: S3 bucket for data storage
+    - UH_ENVIRONMENT: Environment to use ('development' or 'production').
+    - AWS_SECRET_NAME: Name of the secret in AWS Secrets Manager
+    Variables from SecretsManager:
     - MDH_SECRET_KEY: MyDataHelps account secret
     - MDH_ACCOUNT_NAME: MyDataHelps account name
     - MDH_PROJECT_NAME: MyDataHelps project name
     - MDH_PROJECT_ID: MyDataHelps project ID
-    - UH_ENVIRONMENT: Ultrahuman environment ('development' or 'production')
-    - UH_PROD_API_KEY: Ultrahuman production API key (if using production)
-    - UH_PROD_BASE_URL: Ultrahuman production base URL (if using production)
+    - UH_DEV_BASE_URL: Development base URL for UltraHuman API
+    - UH_DEV_API_KEY: Development API key for UltraHuman API
+    - UH_PROD_BASE_URL: Production base URL for UltraHuman API
+    - UH_PROD_API_KEY: Production API key for UltraHuman API
     """
     
     logger.info(f"UltraHuman SNS data collection Lambda started with event: {json.dumps(event)}")
-    
+
+    # setup environment with secrets
+    secrets = get_secret()
+    # hoist to env
+    for key, value in secrets.items():
+        os.environ[key] = value
+
     try:
         uploader = UltrahumanDataUploader()
         

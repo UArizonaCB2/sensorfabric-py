@@ -214,5 +214,10 @@ __marimo__/
 .env
 .DS_Store
 build/
+backup/
+backups/
+.last_backup
 .aider*
 .vscode*
+# python virtual env
+fabric-venv/
