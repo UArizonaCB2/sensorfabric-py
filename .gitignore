@@ -221,3 +221,10 @@ backups/
 .vscode*
 # python virtual env
 fabric-venv/
+
+# CDK Context & Staging files
+cdk.context.json
+.cdk.staging/
+cdk.out/
+*.tabl.json
+cdk-integ.out.*/
