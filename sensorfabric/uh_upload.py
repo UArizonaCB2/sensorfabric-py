@@ -48,9 +48,7 @@ class UltrahumanDataUploader:
         self.target_date = None
 
     def _check_create_database(self):
-        logger.info(f"Checking for database: {self.database_name}")
-        logger.info(wr.catalog.databases())
-        if self.database_name not in wr.catalog.databases().values:
+        if self.database_name not in wr.catalog.databases():
             logger.info(f"Database {self.database_name} does not exist. Creating...")
             wr.catalog.create_database(self.database_name, exist_ok=True)
             logger.info(f"Created database: {self.database_name}")

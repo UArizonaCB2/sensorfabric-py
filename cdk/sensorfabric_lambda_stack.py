@@ -36,10 +36,11 @@ class SensorFabricLambdaStack(Stack):
         self.ecr_registry = "509812589231.dkr.ecr.us-east-1.amazonaws.com"
         self.ecr_repository = "uh-biobayb"
         self.project_name = "uh-biobayb-dev"
+        self.database_name = "uh-biobayb-dev"
         self.sns_topic_name = "mdh_uh_sync"
         self.aws_secret_name = "prod/biobayb/uh/keys"
         self.sf_data_bucket = "uoa-biobayb-uh-dev"
-        self.uh_environment = "development"
+        self.uh_environment = "production"
         self.lambda_functions = {}
         # Environment variables are now properly configured:
         # biobayb_uh_sns_publisher: AWS_SECRET_NAME, UH_DLQ_URL, UH_SNS_TOPIC_ARN
@@ -53,12 +54,9 @@ class SensorFabricLambdaStack(Stack):
                 "timeout": Duration.minutes(15),
                 "memory_size": 3008,
                 "environment": {
-                    "UH_ENVIRONMENT": "development",
-                    "DEFAULT_DATABASE_NAME": "uh-biobayb-dev",
-                    "DEFAULT_DATA_BUCKET": "uoa-biobayb-uh-dev",
-                    "DEFAULT_PROJECT_NAME": "uh-biobayb-dev",
-                    "SF_DATA_BUCKET": "uoa-biobayb-uh-dev",
-                    "AWS_SECRET_NAME": "prod/biobayb/uh/keys"
+                    "UH_ENVIRONMENT": self.uh_environment,
+                    "SF_DATA_BUCKET": self.sf_data_bucket,
+                    "AWS_SECRET_NAME": self.aws_secret_name
                 }
             },
             "biobayb_uh_sns_publisher": {
@@ -66,8 +64,8 @@ class SensorFabricLambdaStack(Stack):
                 "timeout": Duration.minutes(10),
                 "memory_size": 1024,
                 "environment": {
-                    "DEFAULT_PROJECT_NAME": "uh-biobayb-dev",
-                    "AWS_SECRET_NAME": "prod/biobayb/uh/keys"
+                    "AWS_SECRET_NAME": self.aws_secret_name,
+                    "UH_ENVIRONMENT": self.uh_environment
                 }
             }
         }
@@ -321,10 +319,3 @@ class SensorFabricLambdaStack(Stack):
             publisher_lambda = self.lambda_functions["biobayb_uh_sns_publisher"]
             publisher_lambda.add_environment("UH_SNS_TOPIC_ARN", self.uh_data_collection_topic.topic_arn)
             publisher_lambda.add_environment("UH_DLQ_URL", self.uh_dlq.queue_url)
-
-    def add_lambda_environment_variables(self, function_name: str, env_vars: Dict[str, str]) -> None:
-        """Add environment variables to a Lambda function."""
-        if function_name in self.lambda_functions:
-            lambda_function = self.lambda_functions[function_name]
-            for key, value in env_vars.items():
-                lambda_function.add_environment(key, value)
