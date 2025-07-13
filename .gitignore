@@ -226,5 +226,6 @@ fabric-venv/
 cdk.context.json
 .cdk.staging/
 cdk.out/
+cdk/cdk.out/
 *.tabl.json
 cdk-integ.out.*/
