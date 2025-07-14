@@ -261,6 +261,13 @@
         "type": "string"
       },
       "description": "Timestamp for measurement in ISO 8601 format with timezone"
+    },
+    "pid": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Participant identifier"
     }
   },
   "required": [

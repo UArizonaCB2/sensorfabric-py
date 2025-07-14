@@ -130,7 +130,7 @@ def readAWSCredentials(profilename : str,
     return None
 
 
-def flatten_json_to_columns(json_data: Dict[str, Any], fill: bool = False, separator: str = "_") -> Dict[str, List[Any]]:
+def flatten_json_to_columns(json_data: Dict[str, Any], fill: bool = False, separator: str = "_", participant_id: Optional[str] = None) -> Dict[str, List[Any]]:
     """
     Flatten a JSON structure from row-oriented to column-oriented format.
     
@@ -169,6 +169,10 @@ def flatten_json_to_columns(json_data: Dict[str, Any], fill: bool = False, separ
     """
     result = {}
     
+    # insert participant ID
+    if participant_id is not None:
+        json_data['pid'] = participant_id
+
     # First pass: flatten all values and identify the maximum length
     max_length = 1
     
@@ -269,6 +273,7 @@ def convert_dict_timestamps(data: Union[Dict[str, Any], List[Any]], timezone: Op
         "object_sleep_graph_data_start_iso8601_tz": ["2022-12-31T17:00:00-07:00", "2022-12-31T17:00:00-07:00"]
     }
     """
+
     def _is_timestamp_key(key: str) -> bool:
         """Check if a key contains timestamp-related terms."""
         key_lower = key.lower()

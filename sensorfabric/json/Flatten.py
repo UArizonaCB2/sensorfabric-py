@@ -33,17 +33,13 @@ def old_flatten(json_data, base_path='', sep='_', fill=True) -> dict:
     -------
     Returns a dictionary object with the keys as columns.
     """
-    print('called flatten')
     # Append a key to the base path.
     appendPath = lambda p, k : k if len(p) <= 0 else p+sep+k
     if type(json_data) == dict:
         #frame = pandas.DataFrame()
-        print('dict')
         frame = {}
         for k in json_data.keys():
-            print('key', k)
-            f = flatten(json_data[k], appendPath(base_path, k), sep, fill)
-            print('f', f)
+            f = old_flatten(json_data[k], appendPath(base_path, k), sep, fill)
             # Special case : If we are concating a frame of shape 1xm with nxp
             # then the based on the `fill` argument we will expand the 1xm frame to nxm
             # frame before concatinating. Hence filling the empty spaces and causing
@@ -56,11 +52,9 @@ def old_flatten(json_data, base_path='', sep='_', fill=True) -> dict:
             # These need to be concatinated along the column axis.
             #frame = pandas.concat([frame, f], axis=1)
             frame = _concat(frame, f)
-            print('concat frame', frame)
         if base_path == '':
             # track top level keys to extend the values to columns.
             topKeys = list(json_data.keys())
-            print('topKeys', topKeys)
             maxLen = 0
             for k in topKeys:
                 if len(frame[k]) > maxLen:
@@ -72,20 +66,15 @@ def old_flatten(json_data, base_path='', sep='_', fill=True) -> dict:
     elif type(json_data) == list:
         # For each element in the list recursively call the flattener and append to existing frame.
         #frame = pandas.DataFrame()
-        print('list')
         frame = {}
         for ele in json_data:
-            print('ele', ele)
-            f = flatten(ele, base_path, sep, fill)
-            print('f', f)
+            f = old_flatten(ele, base_path, sep, fill)
             # These need to be concatinated along the index axis.
             #frame = pandas.concat([frame, f], axis=0, ignore_index=True)
             frame = _concat(frame, f)
-            print('concat frame', frame)
         return frame
     else:
         #return pandas.DataFrame({base_path:json_data}, index=[0])
-        print('else')
         return {base_path:json_data}
 
 def _concat(dictA, dictB):
@@ -113,26 +102,16 @@ def _filler(small : dict, big : dict) -> dict:
     """
     Extend the smaller dictionary to match the big on.
     """
-    print('called filler')
-    print('small', small)
-    print('big', big)
     targetCount = 0
     for k in big.keys():
-        print('big k', k)
         if type(big[k]) == list:
             if len(big[k]) > targetCount:
                 targetCount = len(big[k])
-    print('targetCount', targetCount)
     for k in small.keys():
-        print('small k', k)
         if not(type(small[k]) == list):
             small[k] = [small[k]] # If it is not a list we make it into a list.
         if len(small[k]) < targetCount:
             lastElement = small[k][-1]
-            print('lastElement', lastElement)
-            print('small[k]', small[k])
-            print('len', len(small[k]))
             for i in range(len(small[k]), targetCount):
                 small[k].append(lastElement)
-    print('small after', small)
     return small

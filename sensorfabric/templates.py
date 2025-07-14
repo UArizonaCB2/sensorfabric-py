@@ -39,7 +39,7 @@ def generate_weekly_report_template(
     """
     
     # Validate the JSON data against the schema
-    # TODO this actually needs to be the resultened schema from SQL query.
+    # TODO this actually needs to be the schema from SQL query.
     validate_sensor_data_schema(json_data)
     
     # Process the JSON data to extract metrics

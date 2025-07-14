@@ -5,8 +5,8 @@ from typing import Dict, List, Any, Optional
 import logging
 import traceback
 import awswrangler as wr
-
-from sensorfabric.needle import Needle
+import boto3
+from sensorfabric.mdh import MDH
 from sensorfabric.uh import UltrahumanAPI
 from sensorfabric.utils import flatten_json_to_columns, convert_dict_timestamps, validate_sensor_data_schema
 import pandas as pd
@@ -30,11 +30,11 @@ class UltrahumanDataUploader:
     1. Processing SNS messages containing participant data
     2. Collecting UltraHuman sensor data for specified participants
     3. Uploading parquet data to S3 in organized folder structure
-    4. Updating participant sync dates in MDH via Needle
+    4. Updating participant sync dates in MDH
     """
     
     def __init__(self):
-        self.needle = None
+        self.mdh = None
         self.uh_api = None
 
         # S3 configuration from environment variables
@@ -56,14 +56,13 @@ class UltrahumanDataUploader:
     def _initialize_connections(self):
         """Initialize MDH and Ultrahuman API connections."""
         try:
-            # Initialize MDH connection via Needle
+            # Initialize MDH connection
             mdh_configuration = {
                 'account_secret': os.environ.get('MDH_SECRET_KEY'),
                 'account_name': os.environ.get('MDH_ACCOUNT_NAME'),
                 'project_id': os.environ.get('MDH_PROJECT_ID'),
-                'project_name': os.environ.get('MDH_PROJECT_NAME', DEFAULT_PROJECT_NAME),
             }
-            self.needle = Needle(method='mdh', mdh_configuration=mdh_configuration)
+            self.mdh = MDH(**mdh_configuration)
             logger.info("MDH connection initialized successfully")
             
             # Initialize Ultrahuman API
@@ -142,8 +141,13 @@ class UltrahumanDataUploader:
         participant_id = participant.get('participantIdentifier')
         
         # For SNS-based processing, email and timezone come directly from message
-        email = participant.get('email')
-        timezone = participant.get('timezone', 'America/Phoenix')
+        email = participant.get('accountEmail')
+        demographics = participant.get('demographics', {})
+        if 'email' in participant and participant.get('email') is not None and participant.get('email') != '':
+            email = participant.get('email')
+        if 'uh_email' in participant and participant.get('uh_email') is not None and participant.get('uh_email') != '':
+            email = participant.get('uh_email')
+        timezone = demographics.get('timeZone', 'America/Phoenix')
         
         # Use target_date from SNS message if available, otherwise use instance target_date
         target_date = participant.get('target_date', self.target_date)
@@ -155,6 +159,7 @@ class UltrahumanDataUploader:
         try:
             # Get DataFrame for this participant and date
             json_obj = self.uh_api.get_metrics(email, target_date)
+            # we may want to store the raw json file alongside the parquet files.
             # pull out UH keys -
             # response structure is {"data": {"metric_data": [{}]}
             data = json_obj.get('data', {})
@@ -170,10 +175,9 @@ class UltrahumanDataUploader:
                 if type(metric) == dict and 'object_values' in metric and len(metric['object_values']) <= 0:
                     # empty data.
                     continue
-                flattened = flatten_json_to_columns(metric, fill=True)
+                flattened = flatten_json_to_columns(json_data=metric, participant_id=participant_id, fill=True)
                 converted = convert_dict_timestamps(flattened, timezone)
                 try:
-                    validate_sensor_data_schema(converted)
                     obj_values = converted.get('object_values', None)
                     obj_total = converted.get('object_total', None)
                     obj_values_value = converted.get('object_values_value', None)
@@ -182,6 +186,7 @@ class UltrahumanDataUploader:
                         logger.error(f"Empty sensor data for participant {participant_id}, metric {metric_type}")
                         continue
 
+                    validate_sensor_data_schema(converted)
                 except jsonschema.ValidationError as e:
                     logger.error(f"Sensor data validation failed for participant {participant_id}, metric {metric_type}: {e.message}")
                     continue
@@ -192,10 +197,10 @@ class UltrahumanDataUploader:
                 else:
                     wr.s3.to_parquet(
                         df=df,
-                        path=f"s3://{self.data_bucket}/dataset/{participant_id}/{metric_type}/",
+                        path=f"s3://{self.data_bucket}/raw/dataset/{metric_type}",
                         dataset=True,
                         database=self.database_name,
-                        table=participant_id,
+                        table=metric_type,
                         s3_additional_kwargs={
                             'Metadata': {
                                 'participant_id': participant_id,
@@ -207,6 +212,7 @@ class UltrahumanDataUploader:
                                 'record_count': str(len(df))
                             }
                         },
+                        partition_cols=['pid'],
                         mode='append',
                     )
                     record_count += len(df)
@@ -248,14 +254,18 @@ class UltrahumanDataUploader:
             current_timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
             
             # Update participant's custom field
-            update_data = {
-                'customFields': {
-                    'uh_sync_date': current_timestamp
+            update_data = [
+                {
+                    participant_id : {
+                        'customFields': {
+                            'uh_sync_date': current_timestamp
+                        }
+                    }
                 }
-            }
+            ]
             
             # Use MDH API to update participant
-            self.needle.mdh.updateParticipant(participant_id, update_data)
+            self.mdh.update_participants(update_data)
             
             logger.info(f"Updated uh_sync_date for participant {participant_id} to {current_timestamp}")
             
@@ -373,6 +383,43 @@ class UltrahumanDataUploader:
             }
 
 
+def get_secret():
+    """
+    Uses secretmanager to fill in MDH secrets
+    """
+    secret_name = os.getenv("AWS_SECRET_NAME")
+    region_name = os.getenv("AWS_REGION", "us-east-1")
+    
+    # Create a Secrets Manager client
+    session = boto3.session.Session()
+    client = session.client(
+        service_name='secretsmanager',
+        region_name=region_name
+    )
+    
+    try:
+        get_secret_value_response = client.get_secret_value(SecretId=secret_name)
+    except ClientError as e:
+        if e.response['Error']['Code'] == 'ResourceNotFoundException':
+            logger.error("The requested secret " + secret_name + " was not found")
+        elif e.response['Error']['Code'] == 'InvalidRequestException':
+            logger.error("The request was invalid due to: " + e.response['Error']['Message'])
+        elif e.response['Error']['Code'] == 'InvalidParameterException':
+            logger.error("The request had invalid params - " + e.response['Error']['Message'])
+        elif e.response['Error']['Code'] == 'DecryptionFailure':
+            logger.error("The requested secret can't be decrypted using the provided KMS key - " + e.response['Error']['Message'])
+        elif e.response['Error']['Code'] == 'InternalServiceError':
+            logger.error("The request was not processed because of an internal error. - " + e.response['Error']['Message'])
+        raise e
+    else:
+        if 'SecretString' in get_secret_value_response:
+            secret = get_secret_value_response['SecretString']
+            return json.loads(secret)
+        else:
+            decoded_binary_secret = base64.b64decode(get_secret_value_response['SecretBinary'])
+            return json.loads(decoded_binary_secret)
+
+
 def lambda_handler(event, context):
     """
     AWS Lambda entry point for UltraHuman data collection via SNS.
@@ -391,17 +438,27 @@ def lambda_handler(event, context):
     
     Environment variables required:
     - SF_DATA_BUCKET: S3 bucket for data storage
+    - UH_ENVIRONMENT: Environment to use ('development' or 'production').
+    - AWS_SECRET_NAME: Name of the secret in AWS Secrets Manager
+    Variables from SecretsManager:
     - MDH_SECRET_KEY: MyDataHelps account secret
     - MDH_ACCOUNT_NAME: MyDataHelps account name
     - MDH_PROJECT_NAME: MyDataHelps project name
     - MDH_PROJECT_ID: MyDataHelps project ID
-    - UH_ENVIRONMENT: Ultrahuman environment ('development' or 'production')
-    - UH_PROD_API_KEY: Ultrahuman production API key (if using production)
-    - UH_PROD_BASE_URL: Ultrahuman production base URL (if using production)
+    - UH_DEV_BASE_URL: Development base URL for UltraHuman API
+    - UH_DEV_API_KEY: Development API key for UltraHuman API
+    - UH_PROD_BASE_URL: Production base URL for UltraHuman API
+    - UH_PROD_API_KEY: Production API key for UltraHuman API
     """
     
     logger.info(f"UltraHuman SNS data collection Lambda started with event: {json.dumps(event)}")
-    
+
+    # setup environment with secrets
+    secrets = get_secret()
+    # hoist to env
+    for key, value in secrets.items():
+        os.environ[key] = value
+
     try:
         uploader = UltrahumanDataUploader()
         

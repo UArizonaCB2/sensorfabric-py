@@ -7,7 +7,7 @@ import traceback
 import boto3
 from botocore.exceptions import ClientError
 
-from sensorfabric.needle import Needle
+from sensorfabric.mdh import MDH
 
 # Configure logging
 logger = logging.getLogger()
@@ -15,19 +15,26 @@ logger.setLevel(logging.INFO)
 
 DEFAULT_PROJECT_NAME = 'uh-biobayb-dev'
 
+# TODO fix environment variables
+# AWS_SECRET_NAME = prod/biobayb/keys # need to grant access to this secret via secretmanager.
+# MDH_ACCOUNT_NAME = MyDataHelps.033FA2F7.development
+# MDH_PROJECT_ID = ba244766-7bd6-408d-8208-0a29c8949321
+# MDH_PROJECT_NAME = uh-biobayb-dev
+# UH_DLQ_URL = arn:aws:sqs:us-east-1:509812589231:biobayb_uh_undeliverable # fill this in with the ARN of the SQS queue created
+# UH_SNS_TOPIC_ARN = arn:aws:sns:us-east-1:509812589231:mdh_uh_sync # fill this in with the ARN of the SNS topic created
 
 class UltrahumanSNSPublisher:
     """
     AWS Lambda function for publishing UltraHuman data collection requests via SNS.
     
     This class handles:
-    1. Fetching active participants from MDH via Needle
+    1. Fetching active participants from MDH
     2. Publishing SNS messages for each participant to trigger data collection
     3. Dead letter queue handling for failed message publishing
     """
     
     def __init__(self):
-        self.needle = None
+        self.mdh = None
         self.sns_client = None
         
         # SNS configuration from environment variables
@@ -46,17 +53,16 @@ class UltrahumanSNSPublisher:
         self.sqs_client = boto3.client('sqs') if self.dead_letter_queue_url else None
 
     def _initialize_connections(self):
-        """Initialize MDH connection via Needle."""
+        """Initialize MDH connection"""
         try:
-            # Initialize MDH connection via Needle
+            # Initialize MDH connection from env vars
             mdh_configuration = {
                 'account_secret': os.environ.get('MDH_SECRET_KEY'),
                 'account_name': os.environ.get('MDH_ACCOUNT_NAME'),
                 'project_id': os.environ.get('MDH_PROJECT_ID'),
-                'project_name': os.environ.get('MDH_PROJECT_NAME', DEFAULT_PROJECT_NAME),
             }
             
-            self.needle = Needle(method='mdh', mdh_configuration=mdh_configuration)
+            self.mdh = MDH(**mdh_configuration)
             logger.info("MDH connection initialized successfully")
             
         except Exception as e:
@@ -79,7 +85,7 @@ class UltrahumanSNSPublisher:
     def _get_active_participants(self) -> List[Dict[str, Any]]:
         """Fetch active participants from MDH."""
         try:
-            participants_data = self.needle.mdh.getAllParticipants()
+            participants_data = self.mdh.getAllParticipants()
             active_participants = []
             
             for participant in participants_data.get('participants', []):
@@ -286,7 +292,7 @@ class UltrahumanSNSPublisher:
                     failed_publishes += 1
             
             # Update participants in MDH
-            mdh_result = self.needle.update_participants(success_participants)
+            mdh_result = self.mdh.update_participants(success_participants)
 
             return {
                 'success': True,
@@ -309,6 +315,45 @@ class UltrahumanSNSPublisher:
             }
 
 
+def get_secret():
+    """
+    Uses secretmanager to fill in MDH secrets
+    """
+    secret_name = os.getenv("AWS_SECRET_NAME")
+    region_name = os.getenv("AWS_REGION", "us-east-1")
+    
+    # Create a Secrets Manager client
+    session = boto3.session.Session()
+    client = session.client(
+        service_name='secretsmanager',
+        region_name=region_name
+    )
+    
+    try:
+        get_secret_value_response = client.get_secret_value(SecretId=secret_name)
+    except ClientError as e:
+        if e.response['Error']['Code'] == 'ResourceNotFoundException':
+            logger.error("The requested secret " + secret_name + " was not found")
+        elif e.response['Error']['Code'] == 'InvalidRequestException':
+            logger.error("The request was invalid due to: " + e.response['Error']['Message'])
+        elif e.response['Error']['Code'] == 'InvalidParameterException':
+            logger.error("The request had invalid params - " + e.response['Error']['Message'])
+        elif e.response['Error']['Code'] == 'DecryptionFailure':
+            logger.error("The requested secret can't be decrypted using the provided KMS key - " + e.response['Error']['Message'])
+        elif e.response['Error']['Code'] == 'InternalServiceError':
+            logger.error("The request was not processed because of an internal error. - " + e.response['Error']['Message'])
+        raise e
+    else:
+        if 'SecretString' in get_secret_value_response:
+            secret = get_secret_value_response['SecretString']
+            logger.info(f"SecretString: {secret}")
+            return json.loads(secret)
+        else:
+            decoded_binary_secret = base64.b64decode(get_secret_value_response['SecretBinary'])
+            logger.info(f"Decoded binary secret: {decoded_binary_secret}")
+            return json.loads(decoded_binary_secret)
+
+
 def lambda_handler(event, context):
     """
     AWS Lambda entry point for publishing UltraHuman data collection requests via SNS.
@@ -321,14 +366,27 @@ def lambda_handler(event, context):
     Environment variables required:
     - UH_SNS_TOPIC_ARN: SNS topic ARN for publishing messages
     - UH_DLQ_URL: SQS queue URL for dead letter messages (optional)
+    - UH_ENVIRONMENT: Environment to use ('development' or 'production').
+    - AWS_SECRET_NAME: Name of the secret in AWS Secrets Manager
+    Variables from SecretsManager:
     - MDH_SECRET_KEY: MyDataHelps account secret
     - MDH_ACCOUNT_NAME: MyDataHelps account name
     - MDH_PROJECT_NAME: MyDataHelps project name
     - MDH_PROJECT_ID: MyDataHelps project ID
+    - UH_DEV_BASE_URL: Development base URL for UltraHuman API
+    - UH_DEV_API_KEY: Development API key for UltraHuman API
+    - UH_PROD_BASE_URL: Production base URL for UltraHuman API
+    - UH_PROD_API_KEY: Production API key for UltraHuman API
     """
     
     logger.info(f"UltraHuman SNS Publisher Lambda started with event: {json.dumps(event)}")
-    
+
+    # setup environment with secrets
+    secrets = get_secret()
+    # hoist to env
+    for key, value in secrets.items():
+        os.environ[key] = value
+
     try:
         publisher = UltrahumanSNSPublisher()
         
