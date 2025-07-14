@@ -277,21 +277,19 @@ class athena:
                     # Load it into a dataframe and ship it out to the user
                     with open(localPath, 'r') as f:
                        frame = pandas.read_csv(f)
-                       if frame.shape[0] > 0:
-                           return frame
-
-        # TODO: Give users the option to stop pagination, or alert them that this is a big
-        #       query and can lead to pagination / memory hog.
-        # Query execution has finished we can now get the query results.
-        frame, nextToken = self.queryResults(executionId,
-                                             nextToken=None,
-                                             columnNames=[])
-        # If this request was paginated, we go ahead and get all the remaining pages.
-        while nextToken:
-            framepage, nextToken = self.queryResults(executionId,
-                                                     nextToken=nextToken,
-                                                     columnNames=frame.columns)
-            frame = pandas.concat([frame, framepage])
+        else:
+            # TODO: Give users the option to stop pagination, or alert them that this is a big
+            #       query and can lead to pagination / memory hog.
+            # Query execution has finished we can now get the query results.
+            frame, nextToken = self.queryResults(executionId,
+                                                nextToken=None,
+                                                columnNames=[])
+            # If this request was paginated, we go ahead and get all the remaining pages.
+            while nextToken:
+                framepage, nextToken = self.queryResults(executionId,
+                                                        nextToken=nextToken,
+                                                        columnNames=frame.columns)
+                frame = pandas.concat([frame, framepage])
 
         # Save this query to the local .cache directory if the offline caching is set to true.
         if self.offlineCache:
