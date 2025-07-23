@@ -294,6 +294,31 @@ class MDH:
             'participants': all_participants
         }
 
+    def getParticipant(self, participant_id: str) -> dict:
+        """
+        Method which returns a specific participant by ID.
+        
+        Parameters
+        ----------
+        participant_id : str
+            The participant ID to retrieve
+            
+        Returns
+        -------
+        dict
+            The participant object with the same structure as described in getAllParticipants()
+            
+        Raises
+        ------
+        requests.exceptions.HTTPError
+            If the API request fails or participant is not found
+        """
+        if not self.isTokenAlive():
+            self.genServiceToken()
+
+        url = ep.MDH_BASE + ep.MDH_PROJ + f'participants/{participant_id}'
+        
+        return self.makeGetRequests(url.format(projectID=self.project_id))
 
     def getExplorerCreds(self) -> dict[str, str]:
         """
