@@ -744,10 +744,67 @@ class MDH:
 
         Returns
         -------
-        A list of datatypes supported by the namespace.
+        A list of datatypes supported by the namespace. Returns both enabled and disabled
+        datatypes.
         """
-        raise ('Method not implemented')
+        results = self.getAllDeviceDataTypes(queryParam={
+            'namespace': namespace
+        })
 
+        return results
+
+    def getDeviceDataPoints(self, namespace: str, types: list[str],
+                            queryParam=dict(),
+                            max_pages=1000):
+        """
+        Method which returns the device data points for a given namespace and type(s).
+
+        Parameters
+        ----------
+        1. namespcae: str - Device namespace. For example AppleHealth
+        2. types: list[str] - A list of datatypes from that namespace we want to query.
+
+        Returns
+        -------
+        Returns a device datapoint points object.
+        Refer to https://developer.mydatahelps.org/api/device_data.html for
+        details
+
+        Raises
+        ------
+        MaxPageLimit - If we hit the maximum page limit
+
+        """
+
+        if not self.isTokenAlive():
+            self.genServiceToken()
+
+        url = ep.MDH_BASE + ep.MDH_V1_DEVICE_DATA
+
+        deviceResults = []
+        currentPage = 1
+
+        types_str = ','.join(types)
+        queryParam['namespace'] = namespace
+        queryParam['type'] = types_str
+
+        while True:
+            response = self.makeGetRequests(url.format(projectID=self.project_id),
+                                            params=queryParam)
+            results = response.get('deviceDataPoints', [])
+            deviceResults.extend(results)
+
+            nextPageID = response.get('nextPageID', None)
+            if nextPageID is None:
+                break
+
+            queryParam['pageID'] = nextPageID
+
+            currentPage += 1
+            if currentPage >= max_pages:
+                raise MaxPageLimitException('There are unread pages. Increase max_pages parameter to get the remaining')
+
+        return deviceResults
 
 class MaxPageLimitException(Exception):
     """
