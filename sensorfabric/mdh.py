@@ -644,3 +644,114 @@ class MDH:
                 "errors": [f"Unexpected error during participant update: {str(e)}"]
             }
 
+    def getSurveyResults(self, queryParam=dict(),
+                         max_pages=1000) -> list(dict[str, str]):
+        """
+        Method which gets survey results.
+
+        Parameters
+        ----------
+        1. queryParam : dict[] - Refer to https://developer.mydatahelps.org/api/survey_results.html#survey-result-data
+        for a complete list of all query paramters that can be used.
+        2. max_pages : int - Maximum number of pages to iterate through. Prevents the
+        code from locking up in case of an error. Raise `MaxPageLimit` exception if
+        we hit this ceiling. Set to a default of 1,000 pages (almost 100,000 survey results).
+
+        Returns
+        -------
+        1. SurveyResultObject : len(dict[]) - Refer to https://developer.mydatahelps.org/api/survey_results.html#survey-result-data
+        for a full description of this surveyresultobject.
+
+        Raises
+        ------
+        MaxPageLimit - If we hit the maximum page limit
+        """
+        if not self.isTokenAlive():
+            self.genServiceToken()
+
+        url = ep.MDH_BASE + ep.MDH_SURVEY
+
+        surveyResults = []
+        currentPage = 1
+
+        while True:
+            response = self.makeGetRequests(url.format(projectID=self.project_id),
+                                            params=queryParam)
+            results = response.get('surveyResults', [])
+            surveyResults.extend(results)
+
+            nextPageID = response.get('nextPageID', None)
+            if nextPageID is None:
+                break
+
+            queryParam['pageID'] = nextPageID
+
+            currentPage += 1
+            if currentPage >= max_pages:
+                raise MaxPageLimitException('There are unread pages. Increase max_pages parameter to get the remaining')
+
+        return surveyResults
+
+    def getAllDeviceDataTypes(self, queryParam=dict()):
+        """
+        Method which gets all the device datatypes
+
+        Parameters
+        ----------
+        1. queryParam : dict[] - Refer to https://developer.mydatahelps.org/api/device_data.html
+        for more details.
+
+        Returns
+        -------
+        1. A list of all device types : list(dict[]) - Refer to
+        https://developer.mydatahelps.org/api/device_data.html for
+        more details.
+        """
+        if not self.isTokenAlive():
+            self.genServiceToken()
+
+        url = ep.MDH_BASE + ep.MDH_V1_DEVICE_DATATYPES
+
+        response = self.makeGetRequests(url.format(projectID=self.project_id),
+                                            params=queryParam)
+
+        return response
+
+    def getActiveDeviceNamespaces(self) -> list[str]:
+        """
+        Method which returns a list of all active device namespaces for this project.
+        Note - The `project` namespace is not returned even if it is activated.
+        """
+        results = self.getAllDeviceDataTypes(queryParam={
+            'enabled': True
+        })
+
+        devices = dict()
+        for result in results:
+            devices[result['namespace']] = 1
+
+        namespaces = devices.keys()
+
+        return namespaces
+
+    def getNamespaceDataTypes(self, namespace: str) -> list[dict[str, str]]:
+        """
+        Method which returns the datatypes for the given namespace.
+
+        Parameters
+        ----------
+        1. namespace: str - Device namespace for example AppleHealth, Omron, etc.
+
+        Returns
+        -------
+        A list of datatypes supported by the namespace.
+        """
+        raise ('Method not implemented')
+
+
+class MaxPageLimitException(Exception):
+    """
+    Raised when we reach the maximum page limit for a query.
+    If this happens to you make sure to increase the maxpage limit on your calls.
+    """
+    pass

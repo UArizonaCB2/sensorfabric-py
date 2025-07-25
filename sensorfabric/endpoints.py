@@ -17,3 +17,12 @@ MDH_EXPORT_DATA = '/api/v1/administration/projects/{projectID}/exports/{exportID
 
 # MDH admin endpoint
 MDH_PROJ= '/api/v1/administration/projects/{projectID}/'
+
+# MDH survey results endpoint
+MDH_SURVEY = '/api/v1/administration/projects/{projectID}/surveyResults'
+
+# MDH device datatypes endpoint
+MDH_V1_DEVICE_DATATYPES = '/api/v1/administration/projects/{projectID}/devicedatapoints/alldatatypes'
+
+# MDH query device data endpoint
+MDH_V1_DEVICE_DATA = '/api/v1/administration/projects/{projectID}/devicedatapoints'
