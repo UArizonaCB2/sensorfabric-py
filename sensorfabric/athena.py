@@ -51,7 +51,8 @@ class athena:
                  workgroup='primary',
                  offlineCache=False,
                  s3_location=None,
-                 profile_name=None):
+                 profile_name=None,
+                 aws_config=None):
 
         self.database = database
         self.catalog = catalog
@@ -61,12 +62,19 @@ class athena:
 
         session = boto3
 
-        if profile_name is None:
-            if not ('AWS_PROFILE' in os.environ):
-                raise Exception('Could not find aws profile to use. Either set it in AWS_PROFILE or pass it explicitly using the parameter profile_name')
-        else:
+        # If the AWS config is provided, it takes priority and use it.
+        if aws_config:
+            session = boto3.Session(
+                aws_access_key_id=aws_config['aws_access_key_id'],
+                aws_secret_access_key=aws_config['aws_secret_access_key'],
+                aws_session_token=aws_config['aws_session_token'],
+                region_name=aws_config['aws_region']
+            )
+        elif profile_name:
             # We need to use the profile name that was provided in this call.
             session = boto3.Session(profile_name=profile_name)
+        else:
+            print('Warning: No profile name or aws configuration given. Using system default.')
 
         self.client = session.client('athena')
         self.s3 = session.client('s3')

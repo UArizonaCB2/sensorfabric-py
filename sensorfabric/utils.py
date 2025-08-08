@@ -71,22 +71,14 @@ def appendAWSCredentials(profilename : str,
 
         cp.write(f)
 
-def isAWSCredValid(profilename : str,
-                   filepath='~/.aws/credentials') -> bool:
+def isMDHAWSCredValid(expirationDate: str) -> bool:
     """
-    Method which given a profilename checks to see if that profile is still valid or has
-    expired. Returns true is the profile is valid, false otherwise.
+    Check to see if the AWS MDH credentials stored in-memory have expired.
     """
-    profile = readAWSCredentials(profilename, filepath=filepath)
-    if profile is None:
-        return False
-
-    if not ('expires' in profile):
-        return False
 
     # The profile is already there. Lets go ahead and read the expire
     # date from the section.
-    expires = datetime.strptime(profile['expires'], "%Y-%m-%dT%H:%M:%S.%fZ")
+    expires = datetime.strptime(expirationDate, "%Y-%m-%dT%H:%M:%S.%fZ")
     # If we have more than 1 hour left for the key to expire then we are good
     # We can go ahead and use the same.
     if datetime.utcnow() < expires:

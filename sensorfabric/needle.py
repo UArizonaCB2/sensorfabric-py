@@ -29,7 +29,7 @@ class Needle:
                  aws_configuration=None,
                  mdh_configuration=None,
                  offlineCache=False,
-                 profileName='sensorfabric'):
+                 profileName=None):
         """
         Creates a new needle (a connector into the dataset) based on the configuration provided.
         If no arguments are passed then environment variables are used.
@@ -48,7 +48,7 @@ class Needle:
         3. mdh_configuration = {
                                 account_secret : '',
                                 account_name : '',
-                                project_code : ''
+                                project_code : '',
                                 }
         4. offlineCache : True to cache the results locally. False otherwise.
         """
@@ -61,6 +61,8 @@ class Needle:
         self.offlineCache = offlineCache
         self.db = None
         self.mdh = None
+        # Stores the data explorer credentials for MDH.
+        self.mdh_explorer = None
 
         self.profileName = profileName
         self.aws_configuration = aws_configuration
@@ -94,48 +96,37 @@ class Needle:
         else:
             raise Exception('Unsupported method. Must be either "aws" or "mdh"')
 
-        # If we have gotten here it means that the AWS credentials have been configured.
-        # We do a quick read to make sure the basics have been configured.
-        # If they are not we will need to error out here and raise an exception.
-
-        credentials = utils.readAWSCredentials(self.profileName)
-
-        if 'aws_access_key_id' in credentials and 'aws_secret_access_key' in credentials:
-            pass
-        else:
-            raise Exception('Unable to confirm AWS credentials by reading them')
-
         # We are all set now. Let us go ahead and create the database object.
         if self.method == 'mdh':
             database = 'mdh_export_database_rk_{}_{}_prod'.format(self.mdh_org_id.lower(), self.mdh_configuration['project_name'])
             workgroup = 'mdh_export_database_external_prod'
             s3_location = 's3://pep-mdh-export-database-prod/execution/rk_{}_{}'.format(self.mdh_org_id.lower(), self.mdh_configuration['project_name'].lower())
 
+            # Create the AWS configuration.
+            aws_configuration = {
+                'aws_access_key_id': self.mdh_explorer['AccessKeyId'],
+                'aws_secret_access_key': self.mdh_explorer['SecretAccessKey'],
+                'aws_session_token': self.mdh_explorer['SessionToken'],
+                'aws_region': 'us-east-1',
+            }
             self.db = athena(database=database,
                              workgroup=workgroup,
                              offlineCache=offlineCache,
                              s3_location=s3_location,
-                             profile_name=profileName)
+                             aws_config=aws_configuration)
 
         elif self.method == 'aws':
            self.db = athena(database=self.aws_configuration['database'],
-                            catalog=self.aws_configuration['catalog'],
+                            catalog=self.aws_configuration.get('catalog', 'AwsDataCatalog'),
                             workgroup=self.aws_configuration['workgroup'],
                             offlineCache=offlineCache,
                             profile_name=profileName)
 
     def _configureAWS(self):
         """
-        Internal method which just appends the environment variables into the
-        local credentials file.
+        Depreciated (Breaking change for some of our Cyverse tools)
         """
-        credentials = {
-            'AccessKeyId' : os.environ['AWS_ACCESS_KEY_ID'],
-            'SecretAccessKey' : os.environ['AWS_SECRET_ACCESS_KEY'],
-            'region' : os.environ['AWS_REGION'],
-        }
-
-        utils.appendAWSCredentials(self.profileName, credentials)
+        pass
 
     def _configureMDH(self):
         """
@@ -169,13 +160,12 @@ class Needle:
         """
         Internal method which tests to see if the AWS credentials are valid.
         If they are not then new ones are created.
-        NOTE: Renewal is only supported for temp credentials from MDH.
-        TODO: Hold the expiration data locally inside the object instead of doing
-        a file read.
+        Renewed credentials are stored inside in-memory object.
         """
-        if not utils.isAWSCredValid(self.profileName) and self.method == 'mdh':
+        if self.method == 'mdh' and (self.mdh_explorer is None or (not utils.isMDHAWSCredValid(self.mdh_explorer['Expiration']))):
             dataExplorer = self.mdh.getExplorerCreds()
-            utils.appendAWSCredentials(self.profileName, dataExplorer)
+            # Store these internally.
+            self.mdh_explorer = dataExplorer
 
     def execQuery(self, queryString:str, queryParams=[],
                   defaultTimeout=60) -> pandas.DataFrame:
