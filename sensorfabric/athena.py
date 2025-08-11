@@ -82,13 +82,11 @@ class athena:
         self.cacheDir = '.cache'
         self.csvDir = '.csv'
 
+        # If we have indicated offline cache then we go ahead and make the
+        # .cache directory.
         if self.offlineCache:
             if not os.path.isdir(self.cacheDir):
                 os.mkdir(self.cacheDir)
-
-        # Let's go ahead and also make the CSV directory.
-        if not os.path.isdir(self.csvDir):
-            os.mkdir(self.csvDir)
 
     """
     Description
@@ -265,6 +263,11 @@ class athena:
         # If we have s3Transfer enabled then let's go ahead and directly transfer the s3
         # file locally and read data from it.
         if s3Transfer:
+
+            # Check to make sure the correct folders have been made.
+            if not os.path.isdir(self.csvDir):
+                os.mkdir(self.csvDir)
+
             match = re.search(r's3://([^/]+)/(.+)', self.s3_location)
             bucketName = None
             objPath = None
