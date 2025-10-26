@@ -1,70 +1,152 @@
-# Python Package for Sensor Fabric
+# SensorFabric Python Package
 
-Welcome to the python package for SensorFabric. 
+Welcome to the `sensorfabric` Python package, developed by the University of Arizona's Center of Bioinformatics and Biostatistics (CB2). This package provides a unified interface for accessing, storing, and processing sensor data through a convenient Python library.
+
+## Table of Contents
+- [What is SensorFabric?](#what-is-sensorfabric)
+- [Installation](#installation)
+- [Getting Started](#getting-started)
+  - [Needle: Unified Connector](#needle-unified-connector)
+  - [Quick Start (AWS Mode)](#quick-start-aws-mode)
+  - [Quick Start (MDH Mode)](#quick-start-mdh-mode)
+- [Needle API](#needle-api)
+- [Security & Secrets](#security--secrets)
+- [Requirements](#requirements)
+- [License](#license)
 
 ## What is SensorFabric?
 
-SensorFabric is an initiative by University of Arizona's Center of Bioinformatics and Biostatistics (CB2)
-to create homogenous layer for accessing, storing and processing sensor data.
+SensorFabric is an initiative by the University of Arizona's CB2 to create a homogenous layer for accessing, storing, and processing sensor data. The `sensorfabric` Python package simplifies interactions with sensor data stored in AWS Athena or MyDataHelps (MDH) environments, providing a unified interface for querying and managing data.
 
-## How to install it?
+## Installation
 
-You can install the sensorfabric python library using `pip` as follows
-```
+To install the `sensorfabric` Python package, use `pip`. The package requires Python 3.10 or higher.
+
+```bash
 pip install sensorfabric
 ```
 
 ## Getting Started
 
-SensorFabric has several different modules. We try to give a basic overview here.
+### Needle: Unified Connector
 
-### Athena Module
-The Athena module abstracts query execution and caching, by returning results from AWS Athena
-as Pandas dataframes. </br>
-**To run this locally you must have aws credentials configured using `aws configure`**
+The `Needle` class is a convenience wrapper that provides a unified interface to:
+- Connect directly to AWS Athena (`method='aws'`), or
+- Connect to MyDataHelps (MDH) (`method='mdh'`), automatically fetching short-lived AWS explorer credentials and querying the MDH Athena export.
 
-Example
+### Quick Start (AWS Mode)
+
+In AWS mode, `Needle` connects directly to an AWS Athena instance. You can configure it using environment variables or a configuration dictionary. Environment variables take precedence when no configuration dictionary is provided.
+
+#### Environment Variables (Optional)
+- `SF_DATABASE`: Athena database name
+- `SF_CATALOG`: Data catalog (default: `AwsDataCatalog`)
+- `SF_WORKGROUP`: Workgroup (default: `primary`)
+- `SF_S3LOC`: S3 output location for query results
+- `AWS_PROFILE`: Optional local AWS profile (alternatively, pass `profileName` to `Needle`)
+
+#### Example
+
+```python
+from sensorfabric.needle import Needle
+
+# Initialize Needle in AWS mode
+needle = Needle(
+    method='aws',
+    aws_configuration={
+        'database': 'my_db',
+        'catalog': 'AwsDataCatalog',
+        'workgroup': 'primary',
+        's3_location': 's3://my-athena-results/'
+    },
+    offlineCache=True,
+    profileName='my-aws-profile'  # Optional: relies on default AWS credentials chain if omitted
+)
+
+# Execute a query
+df = needle.execQuery("SELECT * FROM my_table LIMIT 10", queryParams=[], defaultTimeout=60)
+print(df.head())
 ```
-from sensorfabric.athena import athena
-import pandas as pd
 
-# Create an object.
-db = athena(database='MyExampleDatabase')
+If `aws_configuration` is omitted, `Needle` will read `SF_DATABASE`, `SF_CATALOG`, `SF_WORKGROUP`, and `SF_S3LOC` from environment variables.
 
-# Execute a query by performing a blocking operation.
-frame = db.execQuery('SELECT "participantId" FROM "fitbit_hr" LIMIT 5')
-# Print out the pandas frame.
-print(frame.head())
+### Quick Start (MDH Mode)
 
-# Queries can also be run async (callbacks are currently not supported)
-executionId = db.startQueryExec('SELECT "participantId" FROM "fitbit_hr" LIMIT 5')
-# Returns immidately, with the query execution ID. 
+In MDH mode, `Needle` uses MyDataHelps service credentials to obtain temporary AWS explorer credentials, automatically configuring the Athena database, workgroup, and S3 location for the MDH export project. It also transparently refreshes credentials when they expire.
 
-# Do some important work here
+#### Required Environment Variables (if no configuration dictionary is provided)
+- `MDH_SECRET_KEY`: MDH service secret
+- `MDH_ACCOUNT_NAME`: MDH account name
+- `MDH_PROJECT_ID`: MDH project ID
+- `MDH_PROJECT_NAME`: MDH project name
 
-frame = db.queryResults(executionId)
-# Returns the query result as a dataframe
-print(frame.head()) 
+#### Example
+
+```python
+from sensorfabric.needle import Needle
+import os
+
+# Initialize Needle in MDH mode
+needle = Needle(
+    method='mdh',
+    mdh_configuration={
+        'account_secret': os.getenv('MDH_SECRET_KEY'),
+        'account_name': os.getenv('MDH_ACCOUNT_NAME'),
+        'project_id': os.getenv('MDH_PROJECT_ID'),
+        'project_name': os.getenv('MDH_PROJECT_NAME')
+    },
+    offlineCache=True
+)
+
+# Execute a query (returns a Pandas DataFrame)
+df = needle.execQuery("SELECT * FROM my_table LIMIT 100")
+print(df.head())
 ```
 
-**Enabling offline caching**
-In order to enable offline caching for queries pass `offlineCache=True` to `Athena()`.
-When caching is enabled a `.cache` folder is creating in the calling directory, and query
-results are stored in it. Files are named using the md5 hash of the query string. 
-Pass `cached=True` to `execQuery()` in order to use cached results. The following important
-points need to be noted when using caching -
-* Only exact query strings will cache to the same files.
-* Both `offlineCache` and `cached` must be set true for this to work.
-* There is currently no time limit on the cached results (This might change). 
-* If you want to reset the cache you can delete the `.cache directory`.
+## Needle API
 
-Example
-```
-db = athena(database='MyBigDatabase', offlineCache=True)
+The `Needle` class provides a simple API for querying data. Below is an example of its usage:
 
-# The first query will hit Athena but cache the local results in the .cache directory.
-frame = db.execQuery('SELECT DISTINCT(pid) FROM temperature', cached=True)
-print(frame.head())
-# The second exact query will return results from the local cache.
-frame = db.execQuery('SELECT DISTINCT(pid) FROM temperature', cached=True)
+```python
+from sensorfabric.needle import Needle
+
+# Initialize Needle
+needle = Needle(
+    method='aws',
+    aws_configuration={'database': 'my_db'},
+    offlineCache=True
+)
+
+# Execute a query (blocking)
+df = needle.execQuery("SELECT * FROM my_table WHERE col = 'x' LIMIT 5")
+
+# Use cached results for identical queries (if cached=True in Athena)
+df2 = needle.execQuery("SELECT * FROM my_table WHERE col = 'x' LIMIT 5")
 ```
+
+### Key Parameters for `Needle.__init__`
+- `method`: Either `'aws'` or `'mdh'`
+- `aws_configuration`: Dictionary with `database`, `catalog`, `workgroup`, and `s3_location` (AWS mode)
+- `mdh_configuration`: Dictionary with `account_secret`, `account_name`, `project_id`, and `project_name` (MDH mode)
+- `offlineCache`: Boolean (`True`/`False`) to enable/disable local caching in `.cache/`
+- `profileName`: String specifying an AWS profile (AWS mode; optional)
+
+## Security & Secrets
+
+- **Never commit secrets**: Avoid storing MDH secrets or AWS keys in your codebase. Use environment variables, AWS Parameter Store, or a secret manager.
+- **MDH Mode**: The package requests short-lived explorer credentials and refreshes them as needed.
+- **Caching**: Set `offlineCache=False` in sensitive environments to prevent local caching of query results.
+
+## Requirements
+
+- Python 3.10 or higher
+- Dependencies (automatically installed with `pip install sensorfabric`):
+  - `pandas` for DataFrame handling
+  - `boto3` for AWS interactions
+  - Other dependencies as specified in `setup.py`
+
+## License
+
+This project is licensed under the MIT License. See the `LICENSE` file for details.
+
+---
