@@ -2,6 +2,8 @@
 
 A Python library developed by the University of Arizona's [Center of Biomedical Informatics and Biostatistics (CB2)](https://cb2.arizona.edu) for accessing, storing, and processing sensor data from multiple sources.
 
+> **Note:** Table names and field names used in queries throughout this documentation are for illustration purposes only. Their actual names depend on the specific database configuration being accessed.
+
 ## Overview
 
 SensorFabric provides a unified interface for working with sensor data from various sources including MyDataHelps (MDH) and AWS Athena. The library abstracts the complexity of authentication, data retrieval, and query execution, allowing you to focus on analyzing your sensor data.
@@ -25,7 +27,7 @@ from sensorfabric.needle import Needle
 needle = Needle(method='mdh')
 
 # Execute queries - Needle handles all authentication automatically
-df = needle.execQuery('SELECT * FROM device_data LIMIT 10')
+df = needle.execQuery('SELECT * FROM [tablename] LIMIT 10')
 print(df.head())
 ```
 
@@ -91,7 +93,7 @@ needle = Needle(method='mdh')
 # Query returns a DataFrame
 df = needle.execQuery('''
     SELECT participantId, timestamp, heart_rate
-    FROM device_data
+    FROM [tablename]
     WHERE date >= '2024-01-01'
 ''')
 
@@ -108,10 +110,10 @@ Enable offline caching to avoid re-running expensive queries:
 needle = Needle(method='mdh', offlineCache=True)
 
 # First run hits Athena and caches results
-df = needle.execQuery('SELECT * FROM large_table')
+df = needle.execQuery('SELECT * FROM [tablename]')
 
 # Subsequent runs use cached results
-df = needle.execQuery('SELECT * FROM large_table')
+df = needle.execQuery('SELECT * FROM [tablename]')
 ```
 
 Cached results are stored in a `.cache/` directory using MD5-hashed query strings.
@@ -139,7 +141,7 @@ needle = Needle(
     offlineCache=True
 )
 
-df = needle.execQuery('SELECT * FROM device_data')
+df = needle.execQuery('SELECT * FROM [tablename]')
 ```
 
 ### Direct AWS Athena Access
@@ -158,7 +160,7 @@ needle = Needle(
     aws_configuration=aws_config
 )
 
-df = needle.execQuery('SELECT * FROM my_table')
+df = needle.execQuery('SELECT * FROM [tablename]')
 ```
 
 ### Using the MDH Module Directly
@@ -231,83 +233,6 @@ JSON processing utilities with nested JSON flattening capabilities.
 - cryptography (security)
 - jsonschema==4.24.0 (schema validation)
 
-## Common Use Cases
-
-### Example 1: Analyze Heart Rate Data from MDH
-
-```python
-from sensorfabric.needle import Needle
-import pandas as pd
-
-# Connect to MDH
-needle = Needle(method='mdh')
-
-# Query heart rate data
-df = needle.execQuery('''
-    SELECT
-        participantId,
-        timestamp,
-        heart_rate,
-        date
-    FROM device_data
-    WHERE type = 'HeartRate'
-    AND date >= '2024-01-01'
-    ORDER BY timestamp
-''')
-
-# Calculate average heart rate per participant
-avg_hr = df.groupby('participantId')['heart_rate'].mean()
-print(avg_hr)
-```
-
-### Example 2: Export Participant Data
-
-```python
-from sensorfabric.mdh import MDH
-
-mdh = MDH()
-
-# Get all participants with custom fields
-participants = mdh.getAllParticipants()
-
-# Extract participant identifiers and email addresses
-for p in participants['participants']:
-    pid = p['participantIdentifier']
-    email = p['demographics'].get('email', 'N/A')
-    print(f"{pid}: {email}")
-```
-
-### Example 3: Sync Device Data with Custom Timestamps
-
-```python
-from sensorfabric.mdh import MDH
-from datetime import datetime
-
-mdh = MDH()
-
-# Get device data
-device_data = mdh.getDeviceDataPoints(
-    namespace='AppleHealth',
-    types=['Steps', 'HeartRate'],
-    queryParam={
-        'startDate': '2024-01-01',
-        'endDate': '2024-01-31'
-    }
-)
-
-# Update sync timestamp for participants
-sync_time = datetime.utcnow().isoformat()
-participants_to_update = [
-    {
-        "participantIdentifier": "AA-0000-0001",
-        "customFields": {"last_sync": sync_time}
-    }
-]
-
-result = mdh.update_participants(participants_to_update)
-print(f"Updated {result['totalUpdated']} participants")
-```
-
 ## Error Handling
 
 ```python
@@ -316,7 +241,7 @@ import requests
 
 try:
     needle = Needle(method='mdh')
-    df = needle.execQuery('SELECT * FROM device_data')
+    df = needle.execQuery('SELECT * FROM [tablename]')
 except requests.exceptions.HTTPError as e:
     print(f"HTTP Error: {e}")
 except Exception as e:
