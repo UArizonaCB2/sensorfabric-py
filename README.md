@@ -1,44 +1,46 @@
 # SensorFabric
-
 A Python library developed by the University of Arizona's [Center of Biomedical Informatics and Biostatistics (CB2)](https://cb2.arizona.edu) for accessing, storing, and processing sensor data from multiple sources.
-
 > **Note:** Table names and field names used in queries throughout this documentation are for illustration purposes only. Their actual names depend on the specific database configuration being accessed.
 
-## Overview
+## What is SensorFabric?
+SensorFabric is designed to simplify the integration of sensor data from platforms like MyDataHelps (MDH) and AWS Athena. It's ideal for researchers, data scientists, and developers working with IoT devices, health data, or environmental sensors, providing a unified interface for authentication, data retrieval, and analysis.
 
-SensorFabric provides a unified interface for working with sensor data from various sources including MyDataHelps (MDH) and AWS Athena. The library abstracts the complexity of authentication, data retrieval, and query execution, allowing you to focus on analyzing your sensor data.
+## Overview
+SensorFabric abstracts the complexity of authentication, data retrieval, and query execution, allowing you to focus on analyzing sensor data. [Jump to Installation](#installation) to get started!
 
 ## Installation
-
 ```bash
 pip install sensorfabric
 ```
+**Requirements:** Python 3.10 or higher
 
 ## Quick Start with Needle (Recommended)
-
-The `Needle` class provides a seamless, unified interface for accessing sensor data from multiple sources. It automatically handles authentication, credential refresh, and query execution.
+The `Needle` class provides a seamless interface for accessing sensor data. It handles authentication and query execution automatically.
 
 ### Connecting to MyDataHelps (MDH)
-
 ```python
 from sensorfabric.needle import Needle
-
-# Create a Needle instance for MDH
+# Initialize Needle for MDH (uses environment variables for credentials)
 needle = Needle(method='mdh')
+# Execute a sample query; replace [tablename] with your actual table
+df = needle.execQuery('SELECT * FROM [tablename] LIMIT 10')
+print(df.head())  # Display the first 5 rows of the result
+```
+✅ *That's it! With two lines, you can query MDH data via AWS Athena.*
 
-# Execute queries - Needle handles all authentication automatically
+### Connecting to AWS Athena (Direct)
+```python
+from sensorfabric.needle import Needle
+# Initialize with AWS configuration
+needle = Needle(method='aws')
+# Run a query directly on Athena
 df = needle.execQuery('SELECT * FROM [tablename] LIMIT 10')
 print(df.head())
 ```
 
-That's it! With just two lines of code, you can access your MDH data through AWS Athena.
-
 ## Environment Variables
-
 ### Required for MyDataHelps (MDH)
-
 To use Needle with MDH, you need to configure the following environment variables:
-
 ```bash
 # MyDataHelps Authentication
 export MDH_SECRET_KEY="your-mdh-service-account-secret"
@@ -46,7 +48,6 @@ export MDH_ACCOUNT_NAME="your.account.name.mydatahelps.org"
 export MDH_PROJECT_ID="your-project-uuid"
 export MDH_PROJECT_NAME="your-project-name"
 ```
-
 **How to obtain these credentials:**
 1. Log into your MyDataHelps account
 2. Navigate to your project settings
@@ -54,191 +55,125 @@ export MDH_PROJECT_NAME="your-project-name"
 4. Copy the account secret, account name, project ID, and project name
 
 ### Optional for AWS Athena (Direct Access)
-
 If you're using AWS Athena directly (not through MDH), configure these variables:
-
 ```bash
 # AWS Athena Configuration
 export SF_DATABASE="your-athena-database"
-export SF_CATALOG="AwsDataCatalog"  # Optional, defaults to AwsDataCatalog
-export SF_WORKGROUP="primary"       # Optional, defaults to primary
-export SF_S3LOC="s3://your-bucket/path/"  # Optional
-
+export SF_CATALOG="AwsDataCatalog" # Optional, defaults to AwsDataCatalog
+export SF_WORKGROUP="primary" # Optional, defaults to primary
+export SF_S3LOC="s3://your-bucket/path/" # Optional
 # AWS Credentials (or use aws configure)
 export AWS_PROFILE="your-profile"
 ```
 
 ## Features
-
 ### 🔄 Automatic Credential Management
-
-Needle automatically:
-- Generates JWT tokens for MDH authentication
-- Requests temporary AWS credentials from MDH
-- Refreshes expired credentials before queries
-- Manages in-memory credential storage
-
-No need to worry about token expiration or credential refresh!
+- Generates JWT tokens for MDH
+- Requests temporary AWS credentials
+- Refreshes expired credentials
+- Manages in-memory storage
+⚠️ *No manual token management required!*
 
 ### 📊 Pandas DataFrame Results
-
-All queries return results as pandas DataFrames for easy data manipulation:
-
 ```python
 from sensorfabric.needle import Needle
 import pandas as pd
-
 needle = Needle(method='mdh')
-
-# Query returns a DataFrame
+# Query with filters
 df = needle.execQuery('''
     SELECT participantId, timestamp, heart_rate
     FROM [tablename]
     WHERE date >= '2024-01-01'
 ''')
-
-# Use pandas methods directly
-print(df.describe())
-print(df.groupby('participantId').mean())
+# Analyze with pandas
+print(df.describe())  # Summary statistics
+print(df.groupby('participantId').mean())  # Group by participant
 ```
 
 ### 💾 Query Caching
-
-Enable offline caching to avoid re-running expensive queries:
-
 ```python
 needle = Needle(method='mdh', offlineCache=True)
-
-# First run hits Athena and caches results
+# First run queries Athena and caches
 df = needle.execQuery('SELECT * FROM [tablename]')
-
-# Subsequent runs use cached results
+# Subsequent runs use cache
 df = needle.execQuery('SELECT * FROM [tablename]')
 ```
-
-Cached results are stored in a `.cache/` directory using MD5-hashed query strings.
+*Cached in `.cache/` using MD5-hashed queries.*
 
 ## Advanced Usage
-
 ### Custom Configuration
-
-You can provide configuration programmatically instead of using environment variables:
-
 ```python
 from sensorfabric.needle import Needle
-
-# MDH configuration
+# Define MDH config
 mdh_config = {
     'account_secret': 'your-secret',
     'account_name': 'your.account.name.mydatahelps.org',
     'project_id': 'your-project-id',
     'project_name': 'your-project-name'
 }
-
-needle = Needle(
-    method='mdh',
-    mdh_configuration=mdh_config,
-    offlineCache=True
-)
-
+needle = Needle(method='mdh', mdh_configuration=mdh_config, offlineCache=True)
 df = needle.execQuery('SELECT * FROM [tablename]')
 ```
 
 ### Direct AWS Athena Access
-
 ```python
-# AWS configuration
 aws_config = {
     'database': 'my_database',
     'catalog': 'AwsDataCatalog',
     'workgroup': 'primary',
     's3_location': 's3://my-bucket/results/'
 }
-
-needle = Needle(
-    method='aws',
-    aws_configuration=aws_config
-)
-
+needle = Needle(method='aws', aws_configuration=aws_config)
 df = needle.execQuery('SELECT * FROM [tablename]')
 ```
 
 ### Using the MDH Module Directly
-
-For more control over MDH operations, you can use the MDH class directly:
-
 ```python
 from sensorfabric.mdh import MDH
-
-# Initialize MDH client
 mdh = MDH(
     account_secret='your-secret',
     account_name='your.account.name.mydatahelps.org',
     project_id='your-project-id'
 )
-
-# Get all participants
+# Fetch participants
 participants = mdh.getAllParticipants()
 print(f"Total participants: {participants['totalParticipants']}")
-
-# Get survey results
-surveys = mdh.getSurveyResults(queryParam={
-    'surveyName': 'Daily Check-in',
-    'startDate': '2024-01-01'
-})
-
-# Get device data
-device_data = mdh.getDeviceDataPoints(
-    namespace='AppleHealth',
-    types=['HeartRate', 'Steps'],
-    queryParam={'startDate': '2024-01-01'}
-)
-
-# Update participant custom fields
-participants_to_update = [
-    {
-        "participantIdentifier": "AA-0000-0001",
-        "customFields": {
-            "sync_date": "2024-12-15"
-        }
-    }
-]
-result = mdh.update_participants(participants_to_update)
+# Get survey data
+surveys = mdh.getSurveyResults(queryParam={'surveyName': 'Daily Check-in', 'startDate': '2024-01-01'})
+# Update participant
+participants_to_update = [{"participantIdentifier": "AA-0000-0001", "customFields": {"sync_date": "2024-12-15"}}]
+mdh.update_participants(participants_to_update)
 ```
 
 ## Module Overview
-
 ### 📌 Needle (`sensorfabric.needle`)
-Unified interface supporting multiple data sources ('aws', 'mdh'). **Recommended for most use cases.**
+- Unified interface for 'aws' and 'mdh' sources. *Recommended for general use.*
 
 ### 🔐 MDH (`sensorfabric.mdh`)
-MyDataHelps API gateway with token management, participant management, survey results, and device data access.
+- Manages MDH API, tokens, participants, surveys, and device data.
 
 ### ☁️ Athena (`sensorfabric.athena`)
-AWS Athena query execution with caching and pagination support.
+- Handles AWS Athena queries with caching and pagination.
 
 ### 🔧 Utils (`sensorfabric.utils`)
-Shared utilities including AWS credentials management and timestamp conversion.
+- Provides AWS credential management and timestamp utilities.
 
 ### 📄 JSON (`sensorfabric.json`)
-JSON processing utilities with nested JSON flattening capabilities.
+- Offers JSON flattening and processing tools.
 
 ## Requirements
-
-- Python >= 3.6
+- Python 3.10 or higher
 - boto3 (AWS SDK)
 - pandas (data manipulation)
-- pyjwt==2.10.1 (JWT token handling)
+- pyjwt==2.10.1 (JWT handling)
 - requests (HTTP client)
 - cryptography (security)
 - jsonschema==4.24.0 (schema validation)
 
 ## Error Handling
-
 ```python
 from sensorfabric.needle import Needle
 import requests
-
 try:
     needle = Needle(method='mdh')
     df = needle.execQuery('SELECT * FROM [tablename]')
@@ -249,57 +184,40 @@ except Exception as e:
 ```
 
 ## Security Best Practices
-
-1. **Never commit credentials to version control**
-   - Use environment variables or secret management services
-   - Add `.env` files to `.gitignore`
-
-2. **Use service accounts with minimal permissions**
-   - Only grant access to required projects and data
-
-3. **Rotate credentials regularly**
-   - Update MDH service account secrets periodically
-   - Monitor for unauthorized access
-
-4. **Secure credential storage**
-   - Use AWS Secrets Manager, Azure Key Vault, or similar
-   - Encrypt credentials at rest
+1. ✅ *Never commit credentials* – Use `.env` files and add to `.gitignore`
+2. ⚠️ *Minimize permissions* – Restrict service account access
+3. 🔄 *Rotate credentials* – Update MDH secrets regularly
+4. 🔒 *Secure storage* – Use AWS Secrets Manager or similar
 
 ## Troubleshooting
+### Why "Invalid MDH credentials"?
+- Check `MDH_SECRET_KEY`, `MDH_ACCOUNT_NAME`, and `MDH_PROJECT_ID`
+- Ensure service account access
+- Verify account name format (`your.organization.projectname.mydatahelps.org`)
 
-### "Invalid MDH credentials"
-- Verify `MDH_SECRET_KEY`, `MDH_ACCOUNT_NAME`, and `MDH_PROJECT_ID` are set correctly
-- Check that your service account has access to the project
-- Ensure the account name follows the format: `your.organization.projectname.mydatahelps.org`
+### Why "Query timeout"?
+- Add `LIMIT` to queries
+- Enable caching: `Needle(method='mdh', offlineCache=True)`
 
-### "AWS credentials expired"
-- Needle automatically refreshes credentials, but check your internet connection
-- Verify MDH service account has permission to generate data explorer credentials
+### Why "Empty DataFrame"?
+- Confirm table/database exists
+- Check date ranges and filters
+- Verify MDH-to-Athena data export
 
-### "Query timeout"
-- Large queries may take time; consider adding `LIMIT` clauses
-- Enable caching for repeated queries: `Needle(method='mdh', offlineCache=True)`
-
-### "Empty DataFrame returned"
-- Verify the table/database exists in Athena
-- Check date ranges and filter conditions
-- Ensure data has been exported from MDH to Athena
+## Version
+- *Check [PyPI](https://pypi.org/project/sensorfabric/) for updates.*
 
 ## Contributing
-
 Contributions are welcome! Please contact the CB2 team at the University of Arizona.
 
 ## License
-
 MIT License - see LICENSE file for details
 
 ## Support
-
-For issues, questions, or feature requests, please contact:
+For issues, questions, or feature requests, contact:
 - **Author:** Shravan Aras
 - **Email:** shravanaras@arizona.edu
 - **Organization:** University of Arizona, [Center of Biomedical Informatics and Biostatistics (CB2)](https://cb2.arizona.edu)
 
 ## Acknowledgments
-
 Developed by the University of Arizona's [Center of Biomedical Informatics and Biostatistics (CB2)](https://cb2.arizona.edu).
