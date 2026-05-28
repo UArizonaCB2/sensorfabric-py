@@ -28,5 +28,6 @@ setup(
           'pathlib',
           'cryptography',
           'requests',
+          'clickhouse-driver>=0.2.9',
       ],
 )

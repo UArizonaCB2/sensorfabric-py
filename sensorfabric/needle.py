@@ -16,10 +16,11 @@ But a needle is always what builds the fabric.
 from sensorfabric.mdh import MDH
 from sensorfabric import utils
 from sensorfabric.athena import athena
+from sensorfabric.clickhouse import ClickHouse
 import pandas
 import os
 
-supported_methods = ['aws', 'mdh']
+supported_methods = ['aws', 'mdh', 'clickhouse']
 
 DEFAULT_DATA_CATALOG = 'AwsDataCatalog'
 DEFAULT_WORKGROUP = 'primary'
@@ -28,6 +29,7 @@ class Needle:
     def __init__(self, method=None,
                  aws_configuration=None,
                  mdh_configuration=None,
+                 clickhouse_configuration=None,
                  offlineCache=False,
                  profileName=None):
         """
@@ -36,8 +38,8 @@ class Needle:
 
         Parameters
         ----------
-        1. method : Can be 'aws' to connect directly AWS Athena or 'mdh'
-                    to connect to MyDataHelps.
+        1. method : Can be 'aws' to connect directly AWS Athena, 'mdh'
+                    to connect to MyDataHelps, or 'clickhouse' to connect to ClickHouse.
         2. aws_configuration: AWS Athena connection details -
            aws_configuration = {
                                     database : '',
@@ -50,7 +52,15 @@ class Needle:
                                 account_name : '',
                                 project_code : '',
                                 }
-        4. offlineCache : True to cache the results locally. False otherwise.
+        4. clickhouse_configuration = {
+                                host : '',
+                                port : 9000,
+                                database : 'default',
+                                user : 'default',
+                                password : '',
+                                secure : False,
+                               }
+        5. offlineCache : True to cache the results locally. False otherwise.
         """
         self.method = method
         if not(self.method in supported_methods):
@@ -58,6 +68,7 @@ class Needle:
 
         self.aws_configuration = aws_configuration
         self.mdh_configuration = mdh_configuration
+        self.clickhouse_configuration = clickhouse_configuration
         self.offlineCache = offlineCache
         self.db = None
         self.mdh = None
@@ -67,6 +78,7 @@ class Needle:
         self.profileName = profileName
         self.aws_configuration = aws_configuration
         self.mdh_configuration = mdh_configuration
+        self.clickhouse_configuration = clickhouse_configuration
         self.mdh_org_id = None
 
         # Set the configuration from environment variables if they have
@@ -87,14 +99,25 @@ class Needle:
                 'project_name' : os.getenv('MDH_PROJECT_NAME', None),
             }
 
-        # Create the base athena connector depending on the configuration
-        # given.
+        if self.method == 'clickhouse' and self.clickhouse_configuration is None:
+            self.clickhouse_configuration = {
+                'host' : os.getenv('CH_HOST', 'localhost'),
+                'port' : int(os.getenv('CH_PORT', '9000')),
+                'database' : os.getenv('CH_DATABASE', 'default'),
+                'user' : os.getenv('CH_USER', 'default'),
+                'password' : os.getenv('CH_PASSWORD', ''),
+                'secure' : os.getenv('CH_SECURE', 'false').lower() == 'true',
+            }
+
+        # Create the base connector depending on the configuration given.
         if self.method == 'aws':
             self._configureAWS()
         elif self.method == 'mdh':
             self._configureMDH()
+        elif self.method == 'clickhouse':
+            self._configureClickHouse()
         else:
-            raise Exception('Unsupported method. Must be either "aws" or "mdh"')
+            raise Exception('Unsupported method. Must be one of: "aws", "mdh", "clickhouse"')
 
         # We are all set now. Let us go ahead and create the database object.
         if self.method == 'mdh':
@@ -127,6 +150,20 @@ class Needle:
         Depreciated (Breaking change for some of our Cyverse tools)
         """
         pass
+
+    def _configureClickHouse(self):
+        """
+        Internal method that configures sensorfabric to use ClickHouse as the backend.
+        """
+        self.db = ClickHouse(
+            host=self.clickhouse_configuration['host'],
+            port=self.clickhouse_configuration['port'],
+            database=self.clickhouse_configuration['database'],
+            user=self.clickhouse_configuration['user'],
+            password=self.clickhouse_configuration['password'],
+            secure=self.clickhouse_configuration['secure'],
+            offlineCache=self.offlineCache
+        )
 
     def _configureMDH(self):
         """
