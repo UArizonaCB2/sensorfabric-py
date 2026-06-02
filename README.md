@@ -3,7 +3,7 @@ A Python library developed by the University of Arizona's [Center of Biomedical 
 > **Note:** Table names and field names used in queries throughout this documentation are for illustration purposes only. Their actual names depend on the specific database configuration being accessed.
 
 ## What is SensorFabric?
-SensorFabric is designed to simplify the integration of sensor data from platforms like MyDataHelps (MDH) and AWS Athena. It's ideal for researchers, data scientists, and developers working with IoT devices, health data, or environmental sensors, providing a unified interface for authentication, data retrieval, and analysis.
+SensorFabric is designed to simplify the integration of sensor data from platforms like MyDataHelps (MDH), AWS Athena, and ClickHouse. It's ideal for researchers, data scientists, and developers working with IoT devices, health data, or environmental sensors, providing a unified interface for authentication, data retrieval, and analysis.
 
 ## Overview
 SensorFabric abstracts the complexity of authentication, data retrieval, and query execution, allowing you to focus on analyzing sensor data. [Jump to Installation](#installation) to get started!
@@ -38,6 +38,16 @@ df = needle.execQuery('SELECT * FROM [tablename] LIMIT 10')
 print(df.head())
 ```
 
+### Connecting to ClickHouse
+```python
+from sensorfabric.needle import Needle
+# Initialize with ClickHouse (uses environment variables for connection)
+needle = Needle(method='clickhouse')
+# Run a query on ClickHouse
+df = needle.execQuery('SELECT * FROM [tablename] LIMIT 10')
+print(df.head())
+```
+
 ## Environment Variables
 ### Required for MyDataHelps (MDH)
 To use Needle with MDH, you need to configure the following environment variables:
@@ -64,6 +74,18 @@ export SF_WORKGROUP="primary" # Optional, defaults to primary
 export SF_S3LOC="s3://your-bucket/path/" # Optional
 # AWS Credentials (or use aws configure)
 export AWS_PROFILE="your-profile"
+```
+
+### Optional for ClickHouse
+If you're using ClickHouse as your data backend:
+```bash
+# ClickHouse Configuration
+export CH_HOST="localhost"          # ClickHouse server hostname
+export CH_PORT="9000"              # Native protocol port (default: 9000)
+export CH_DATABASE="default"       # Database name
+export CH_USER="default"           # Username
+export CH_PASSWORD=""              # Password
+export CH_SECURE="false"           # Use TLS/SSL (true/false)
 ```
 
 ## Features
@@ -127,6 +149,43 @@ needle = Needle(method='aws', aws_configuration=aws_config)
 df = needle.execQuery('SELECT * FROM [tablename]')
 ```
 
+### Direct ClickHouse Access
+```python
+from sensorfabric.needle import Needle
+
+ch_config = {
+    'host': 'clickhouse.example.com',
+    'port': 9000,
+    'database': 'sensor_data',
+    'user': 'reader',
+    'password': 'secret',
+    'secure': True
+}
+needle = Needle(method='clickhouse', clickhouse_configuration=ch_config, offlineCache=True)
+df = needle.execQuery('SELECT * FROM [tablename]')
+```
+
+### Using the ClickHouse Module Directly
+```python
+from sensorfabric.clickhouse import ClickHouse
+
+ch = ClickHouse(
+    host='localhost',
+    database='sensor_data',
+    offlineCache=True
+)
+
+# Query data as a DataFrame
+df = ch.execQuery('SELECT * FROM readings WHERE device_id = %(id)s', params={'id': 'sensor-01'})
+
+# Insert a DataFrame into ClickHouse
+ch.insert_dataframe('readings', df)
+
+# Introspection
+tables = ch.get_tables()
+columns = ch.get_columns('readings')
+```
+
 ### Using the MDH Module Directly
 ```python
 from sensorfabric.mdh import MDH
@@ -147,13 +206,16 @@ mdh.update_participants(participants_to_update)
 
 ## Module Overview
 ### 📌 Needle (`sensorfabric.needle`)
-- Unified interface for 'aws' and 'mdh' sources. *Recommended for general use.*
+- Unified interface for 'aws', 'mdh', and 'clickhouse' sources. *Recommended for general use.*
 
 ### 🔐 MDH (`sensorfabric.mdh`)
 - Manages MDH API, tokens, participants, surveys, and device data.
 
 ### ☁️ Athena (`sensorfabric.athena`)
 - Handles AWS Athena queries with caching and pagination.
+
+### 🏠 ClickHouse (`sensorfabric.clickhouse`)
+- Connects to ClickHouse with query execution, caching, DataFrame inserts, and table introspection.
 
 ### 🔧 Utils (`sensorfabric.utils`)
 - Provides AWS credential management and timestamp utilities.
@@ -169,6 +231,7 @@ mdh.update_participants(participants_to_update)
 - requests (HTTP client)
 - cryptography (security)
 - jsonschema==4.24.0 (schema validation)
+- clickhouse-driver>=0.2.9 (ClickHouse native protocol client)
 
 ## Error Handling
 ```python

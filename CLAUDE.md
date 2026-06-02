@@ -11,9 +11,10 @@ SensorFabric is a Python library developed by the University of Arizona's Center
 ### Main Modules
 
 - **`athena.py`**: AWS Athena query execution and caching with Pandas DataFrame results
+- **`clickhouse.py`**: ClickHouse query execution and caching with Pandas DataFrame results
 - **`mdh.py`**: MyDataHelps API authentication and data access utilities  
 - **`uh.py`**: UltraHuman API client for metrics data (development/production environments)
-- **`needle.py`**: Unified interface supporting multiple data sources ('aws', 'mdh')
+- **`needle.py`**: Unified interface supporting multiple data sources ('aws', 'mdh', 'clickhouse')
 - **`utils.py`**: Shared utilities including AWS credentials management and timestamp conversion
 - **`json/`**: JSON processing utilities with `Flatten.py` for nested JSON flattening
 - **`schemas/`**: JSON schema definitions for sensor data validation
@@ -22,9 +23,10 @@ SensorFabric is a Python library developed by the University of Arizona's Center
 ### Key Classes
 
 - `athena`: Connects to AWS Athena with query caching and pagination support
+- `ClickHouse`: Connects to ClickHouse with query caching and DataFrame insert support
 - `MDH`: MyDataHelps API gateway with token management
 - `UltrahumanAPI`: API client with environment-based configuration
-- `Needle`: Unified data source interface supporting multiple backends
+- `Needle`: Unified data source interface supporting multiple backends ('aws', 'mdh', 'clickhouse')
 
 ## Development Commands
 
@@ -78,6 +80,14 @@ python setup.py sdist bdist_wheel
 - `UH_ENVIRONMENT`: 'development' or 'production' (default: 'development')
 - `UH_DEV_API_KEY` / `UH_PROD_API_KEY`: API keys for respective environments
 - `UH_DEV_BASE_URL` / `UH_PROD_BASE_URL`: Base URLs for respective environments
+
+### ClickHouse
+- `CH_HOST`: ClickHouse server hostname (default: 'localhost')
+- `CH_PORT`: ClickHouse native protocol port (default: 9000)
+- `CH_DATABASE`: Database name (default: 'default')
+- `CH_USER`: Username (default: 'default')
+- `CH_PASSWORD`: Password (default: empty)
+- `CH_SECURE`: Use TLS/SSL ('true' or 'false', default: 'false')
 
 ### MyDataHelps
 - `MDH_SECRET_KEY`: Account secret for authentication
