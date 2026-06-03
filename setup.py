@@ -28,6 +28,7 @@ setup(
           'pathlib',
           'cryptography',
           'requests',
+          'pytz',
           'clickhouse-driver>=0.2.9',
       ],
 )
