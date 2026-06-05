@@ -105,21 +105,21 @@ class ClickHouse:
                 frame = pandas.read_csv(path)
                 return frame
 
-        # Execute the query using clickhouse-driver which returns
-        # (data, columns) when with_column_types=True.
+        # Execute the query using clickhouse-driver.
+        # Returns (rows, column_types) with with_column_types=True.
         result = self.client.execute(
             queryString,
             params=params,
             with_column_types=True
         )
 
-        data = result[0]
+        rows = result[0]
         columns = [col[0] for col in result[1]]
 
-        if not data:
+        if not rows:
             return pandas.DataFrame(columns=columns)
 
-        frame = pandas.DataFrame(data, columns=columns)
+        frame = pandas.DataFrame(rows, columns=columns)
 
         # Save to cache if offline caching is enabled.
         if self.offlineCache:

@@ -7,7 +7,7 @@ with open('README.md', 'r') as f:
 
 setup(
     name='sensorfabric',
-    version='3.3.2',
+    version='3.4.0',
     description='Python library for UA Sensor Fabric',
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -20,6 +20,7 @@ setup(
     python_requires='>=3',
     install_requires=[
           'boto3',
+          'awswrangler',
           'pandas',
           'numpy',
           'pyjwt==2.10.1',
@@ -28,6 +29,7 @@ setup(
           'pathlib',
           'cryptography',
           'requests',
+          'pytz',
           'clickhouse-driver>=0.2.9',
       ],
 )
