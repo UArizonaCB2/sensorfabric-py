@@ -226,4 +226,6 @@ class Needle:
         this will return an empty pandas frame.
         """
         self._testAndRequestNew()
+        if self.method == 'clickhouse':
+            return self.db.execQuery(queryString)
         return self.db.execQuery(queryString, queryParams, defaultTimeout)
