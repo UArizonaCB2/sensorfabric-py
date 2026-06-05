@@ -81,12 +81,13 @@ If you're using ClickHouse as your data backend:
 ```bash
 # ClickHouse Configuration
 export CH_HOST="localhost"          # ClickHouse server hostname
-export CH_PORT="9000"              # Native protocol port (default: 9000)
+export CH_PORT="9000"              # Native protocol port (default: 9000, NOT 8123/HTTP)
 export CH_DATABASE="default"       # Database name
 export CH_USER="default"           # Username
 export CH_PASSWORD=""              # Password
 export CH_SECURE="false"           # Use TLS/SSL (true/false)
 ```
+> **Note:** This library uses the ClickHouse native protocol (port 9000). The HTTP interface (port 8123) is not supported.
 
 ## Features
 ### 🔄 Automatic Credential Management
@@ -226,11 +227,14 @@ mdh.update_participants(participants_to_update)
 ## Requirements
 - Python 3.10 or higher
 - boto3 (AWS SDK)
+- awswrangler (extended AWS data operations)
 - pandas (data manipulation)
+- numpy (numerical operations)
 - pyjwt==2.10.1 (JWT handling)
 - requests (HTTP client)
 - cryptography (security)
 - jsonschema==4.24.0 (schema validation)
+- pytz (timezone handling)
 - clickhouse-driver>=0.2.9 (ClickHouse native protocol client)
 
 ## Error Handling

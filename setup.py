@@ -7,7 +7,7 @@ with open('README.md', 'r') as f:
 
 setup(
     name='sensorfabric',
-    version='3.3.2',
+    version='3.4.0',
     description='Python library for UA Sensor Fabric',
     long_description=long_description,
     long_description_content_type="text/markdown",
