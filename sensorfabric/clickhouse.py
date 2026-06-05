@@ -105,21 +105,26 @@ class ClickHouse:
                 frame = pandas.read_csv(path)
                 return frame
 
-        # Execute the query using clickhouse-driver which returns
-        # (data, columns) when with_column_types=True.
+        # Execute the query. Use columnar mode for cleaner DataFrame construction.
         result = self.client.execute(
             queryString,
             params=params,
-            with_column_types=True
+            with_column_types=True,
+            columnar=True
         )
 
+        columns_with_types = result[1]
+        columns = [col[0] for col in columns_with_types]
         data = result[0]
-        columns = [col[0] for col in result[1]]
 
-        if not data:
+        if not columns:
+            return pandas.DataFrame()
+
+        if not data or all(len(col) == 0 for col in data):
             return pandas.DataFrame(columns=columns)
 
-        frame = pandas.DataFrame(data, columns=columns)
+        # Build DataFrame from columnar data
+        frame = pandas.DataFrame(dict(zip(columns, data)))
 
         # Save to cache if offline caching is enabled.
         if self.offlineCache:

@@ -154,14 +154,16 @@ class Needle:
     def _configureClickHouse(self):
         """
         Internal method that configures sensorfabric to use ClickHouse as the backend.
+        Note: clickhouse-driver uses the native TCP protocol (default port 9000).
+        Port 8123 is the HTTP interface and is NOT supported by this driver.
         """
         self.db = ClickHouse(
             host=self.clickhouse_configuration['host'],
-            port=self.clickhouse_configuration['port'],
+            port=int(self.clickhouse_configuration['port']),
             database=self.clickhouse_configuration['database'],
             user=self.clickhouse_configuration['user'],
             password=self.clickhouse_configuration['password'],
-            secure=self.clickhouse_configuration['secure'],
+            secure=self.clickhouse_configuration.get('secure', False),
             offlineCache=self.offlineCache
         )
 
