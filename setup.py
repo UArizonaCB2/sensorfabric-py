@@ -20,6 +20,7 @@ setup(
     python_requires='>=3',
     install_requires=[
           'boto3',
+          'awswrangler',
           'pandas',
           'numpy',
           'pyjwt==2.10.1',
